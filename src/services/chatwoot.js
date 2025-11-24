@@ -92,14 +92,19 @@ class ChatwootService {
             const FormData = require('form-data');
             const form = new FormData();
             
+            console.log(`📤 Preparando upload:`);
+            console.log(`   - Arquivo: ${fileName}`);
+            console.log(`   - Tipo: ${mimeType}`);
+            console.log(`   - Tamanho: ${Math.round(fileBuffer.length / 1024)}KB`);
+            console.log(`   - Conversa ID: ${conversationId}`);
+            
             form.append('attachments[]', fileBuffer, {
                 filename: fileName,
                 contentType: mimeType
             });
 
             form.append('message_type', 'incoming');
-
-            console.log(`📤 Fazendo upload de: ${fileName} (${mimeType})`);
+            form.append('private', 'false');
 
             const response = await this.client.post(
                 `/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
@@ -108,14 +113,26 @@ class ChatwootService {
                     headers: {
                         ...form.getHeaders(),
                         'api_access_token': this.apiToken
-                    }
+                    },
+                    maxContentLength: Infinity,
+                    maxBodyLength: Infinity
                 }
             );
 
-            console.log(`✅ Upload concluído: ${fileName}`);
+            console.log(`✅ Upload concluído com sucesso!`);
+            console.log(`✅ Response status: ${response.status}`);
+            console.log(`✅ Message ID: ${response.data.id || 'N/A'}`);
+            
             return response.data;
+            
         } catch (error) {
-            console.error('❌ Erro ao fazer upload:', error.response?.data || error.message);
+            console.error('❌ ERRO DETALHADO NO UPLOAD:');
+            console.error('❌ Status:', error.response?.status);
+            console.error('❌ Status Text:', error.response?.statusText);
+            console.error('❌ Headers:', JSON.stringify(error.response?.headers, null, 2));
+            console.error('❌ Data:', JSON.stringify(error.response?.data, null, 2));
+            console.error('❌ Message:', error.message);
+            console.error('❌ Stack:', error.stack);
             throw error;
         }
     }
