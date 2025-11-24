@@ -156,20 +156,6 @@ router.post('/:instanceName', async (req, res) => {
             if (hasMedia) {
                 console.log('📎 Mídia detectada:', mediaType);
             }
-                        if (hasMedia) {
-                console.log('📎 Mídia detectada:', mediaType);
-                
-                // 🔍 LOG: Mostrar campos disponíveis
-                if (mediaType === 'image' && message.imageMessage) {
-                    console.log('🔍 Campos disponíveis em imageMessage:', Object.keys(message.imageMessage));
-                } else if (mediaType === 'document' && message.documentMessage) {
-                    console.log('🔍 Campos disponíveis em documentMessage:', Object.keys(message.documentMessage));
-                } else if (mediaType === 'audio' && message.audioMessage) {
-                    console.log('🔍 Campos disponíveis em audioMessage:', Object.keys(message.audioMessage));
-                } else if (mediaType === 'video' && message.videoMessage) {
-                    console.log('🔍 Campos disponíveis em videoMessage:', Object.keys(message.videoMessage));
-                }
-            }
 
             try {
                 const chatwoot = new ChatwootService(integration);
@@ -199,17 +185,17 @@ router.post('/:instanceName', async (req, res) => {
                         let mediaBuffer = null;
                         
                         if (mediaType === 'image' && message.imageMessage) {
-                            // Base64 pode estar em 'url' ou em campo específico
-                            mediaBase64 = message.imageMessage.url || 
-                                         message.imageMessage.jpegThumbnail;
+                            // Campo é URL (MAIÚSCULO), não url!
+                            mediaBase64 = message.imageMessage.URL || 
+                                         message.imageMessage.JPEGThumbnail;
                         } else if (mediaType === 'video' && message.videoMessage) {
-                            mediaBase64 = message.videoMessage.url;
+                            mediaBase64 = message.videoMessage.URL;
                         } else if (mediaType === 'audio' && message.audioMessage) {
-                            mediaBase64 = message.audioMessage.url;
+                            mediaBase64 = message.audioMessage.URL;
                         } else if (mediaType === 'document' && message.documentMessage) {
-                            mediaBase64 = message.documentMessage.url;
+                            mediaBase64 = message.documentMessage.URL;
                         } else if (mediaType === 'sticker' && message.stickerMessage) {
-                            mediaBase64 = message.stickerMessage.url;
+                            mediaBase64 = message.stickerMessage.URL;
                         }
                         
                         if (!mediaBase64) {
