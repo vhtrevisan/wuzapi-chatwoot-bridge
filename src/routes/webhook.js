@@ -3,15 +3,25 @@ const router = express.Router();
 const { getIntegrationByInstance } = require('../database/sqlite');
 const ChatwootService = require('../services/chatwoot');
 
+// Cache de mensagens enviadas pelo Chatwoot (IDs das últimas mensagens enviadas)
+const chatwootMessageCache = new Map();
+
+// Limpa cache a cada 5 minutos (mensagens antigas)
+setInterval(() => {
+    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    for (const [messageId, timestamp] of chatwootMessageCache.entries()) {
+        if (timestamp < fiveMinutesAgo) {
+            chatwootMessageCache.delete(messageId);
+        }
+    }
+}, 60000); // Roda a cada 1 minuto
+
 router.post('/:instanceName', async (req, res) => {
     try {
         const { instanceName } = req.params;
         const webhookData = req.body;
 
         console.log(`📨 Webhook recebido para instância: ${instanceName}`);
-        console.log(`📦 Dados recebidos (req.body):`, JSON.stringify(webhookData, null, 2));
-        console.log(`📦 Tipo de webhookData:`, typeof webhookData);
-        console.log(`📦 Keys do webhookData:`, Object.keys(webhookData || {}));
 
         // Busca configuração da instância
         const integration = await getIntegrationByInstance(instanceName);
@@ -21,29 +31,20 @@ router.post('/:instanceName', async (req, res) => {
             return res.status(404).json({ error: 'Instância não configurada' });
         }
 
-        // Parse do jsonData que vem como string OU objeto
+        // Parse do jsonData
         let parsedData;
 
-        // Se já vier como objeto (alguns webhooks enviam direto)
         if (typeof webhookData === 'object' && webhookData.type) {
-            console.log('✅ Webhook já veio como objeto JSON');
             parsedData = webhookData;
-        }
-        // Se vier com jsonData como string (formato antigo)
-        else if (webhookData.jsonData) {
+        } else if (webhookData.jsonData) {
             try {
                 parsedData = JSON.parse(webhookData.jsonData);
-                console.log('✅ Parse do jsonData realizado com sucesso');
             } catch (parseError) {
                 console.log('⚠️ Erro ao fazer parse do jsonData:', parseError.message);
-                console.log('⚠️ jsonData recebido:', webhookData.jsonData);
                 return res.status(400).json({ error: 'Formato de dados inválido' });
             }
-        }
-        // Se não tiver nem type nem jsonData
-        else {
+        } else {
             console.log('⚠️ Formato de webhook não reconhecido');
-            console.log('⚠️ Dados recebidos:', JSON.stringify(webhookData, null, 2));
             return res.status(400).json({ error: 'Formato de webhook não reconhecido' });
         }
 
@@ -53,21 +54,26 @@ router.post('/:instanceName', async (req, res) => {
         // PROCESSA MENSAGENS RECEBIDAS
         // ========================================
         if (parsedData.type === 'Message') {
-            // Verifica se é mensagem recebida (não enviada por você)
-            const isFromMe = parsedData.event?.Info?.IsFromMe;
-            
-            if (isFromMe === true) {
-                console.log('⏭️ Mensagem ignorada (enviada por você)');
-                return res.status(200).json({ success: true, message: 'Ignored outgoing message' });
-            }
-
-            // Extrai dados da mensagem
             const info = parsedData.event?.Info;
             const message = parsedData.event?.Message;
+            const isFromMe = info?.IsFromMe;
+            const messageId = info?.ID;
 
             if (!info || !message) {
                 console.log('⚠️ Estrutura de dados incompleta');
                 return res.status(400).json({ error: 'Dados incompletos' });
+            }
+
+            // NOVA LÓGICA: Verifica se mensagem foi enviada pelo Chatwoot
+            if (isFromMe === true) {
+                // Verifica se está no cache (foi enviada pelo Chatwoot)
+                if (chatwootMessageCache.has(messageId)) {
+                    console.log('⏭️ Mensagem ignorada (enviada pelo Chatwoot)');
+                    return res.status(200).json({ success: true, message: 'Ignored Chatwoot outgoing message' });
+                }
+                
+                // Se não está no cache, é mensagem enviada pelo WhatsApp Web/Celular
+                console.log('✅ Mensagem enviada pelo WhatsApp Web/Celular - será processada');
             }
 
             // Extrai número de telefone
@@ -75,7 +81,7 @@ router.post('/:instanceName', async (req, res) => {
             phoneNumber = phoneNumber.replace('@s.whatsapp.net', '')
                                      .replace('@c.us', '')
                                      .replace('@lid', '')
-                                     .split(':')[0]; // Remove sufixo :82
+                                     .split(':')[0];
 
             const senderName = info.PushName || phoneNumber;
 
@@ -126,12 +132,16 @@ router.post('/:instanceName', async (req, res) => {
                 );
                 console.log('✅ Conversa ID:', conversation.id);
 
+                // Define tipo de mensagem (incoming ou outgoing)
+                const messageType = isFromMe === true ? 'outgoing' : 'incoming';
+                console.log(`📝 Tipo de mensagem: ${messageType}`);
+
                 // Envia mensagem
                 console.log('📤 Enviando mensagem para Chatwoot...');
                 await chatwoot.sendMessage(conversation.id, {
                     content: messageText,
                     text: messageText
-                }, 'incoming');
+                }, messageType);
 
                 console.log(`✅ Mensagem enviada com sucesso!`);
                 
@@ -184,5 +194,10 @@ router.post('/:instanceName', async (req, res) => {
         });
     }
 });
+
+// Exporta função para adicionar IDs ao cache (será chamada quando enviar pelo Chatwoot)
+router.addToChatwootCache = (messageId) => {
+    chatwootMessageCache.set(messageId, Date.now());
+};
 
 module.exports = router;
