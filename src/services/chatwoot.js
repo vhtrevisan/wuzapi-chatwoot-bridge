@@ -87,7 +87,7 @@ class ChatwootService {
     /**
      * Faz upload de attachment no Chatwoot
      */
-    async uploadAttachment(conversationId, fileBuffer, fileName, mimeType) {
+    async uploadAttachment(conversationId, fileBuffer, fileName, mimeType, caption = '') {
         try {
             const FormData = require('form-data');
             const form = new FormData();
@@ -97,12 +97,15 @@ class ChatwootService {
             console.log(`   - Tipo: ${mimeType}`);
             console.log(`   - Tamanho: ${Math.round(fileBuffer.length / 1024)}KB`);
             console.log(`   - Conversa ID: ${conversationId}`);
+            console.log(`   - Legenda: ${caption || 'Sem legenda'}`);
             
             form.append('attachments[]', fileBuffer, {
                 filename: fileName,
                 contentType: mimeType
             });
 
+            // CRÍTICO: Usa legenda ou nome do arquivo
+            form.append('content', caption || fileName);
             form.append('message_type', 'incoming');
             form.append('private', 'false');
 
@@ -119,20 +122,16 @@ class ChatwootService {
                 }
             );
 
-            console.log(`✅ Upload concluído com sucesso!`);
-            console.log(`✅ Response status: ${response.status}`);
-            console.log(`✅ Message ID: ${response.data.id || 'N/A'}`);
+            console.log(`✅ Upload concluído!`);
+            console.log(`✅ Message ID: ${response.data.id}`);
             
             return response.data;
             
         } catch (error) {
-            console.error('❌ ERRO DETALHADO NO UPLOAD:');
+            console.error('❌ ERRO NO UPLOAD:');
             console.error('❌ Status:', error.response?.status);
-            console.error('❌ Status Text:', error.response?.statusText);
-            console.error('❌ Headers:', JSON.stringify(error.response?.headers, null, 2));
             console.error('❌ Data:', JSON.stringify(error.response?.data, null, 2));
             console.error('❌ Message:', error.message);
-            console.error('❌ Stack:', error.stack);
             throw error;
         }
     }
