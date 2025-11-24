@@ -9,6 +9,9 @@ router.post('/:instanceName', async (req, res) => {
         const webhookData = req.body;
 
         console.log(`📨 Webhook recebido para instância: ${instanceName}`);
+        console.log(`📦 Dados recebidos (req.body):`, JSON.stringify(webhookData, null, 2));
+        console.log(`📦 Tipo de webhookData:`, typeof webhookData);
+        console.log(`📦 Keys do webhookData:`, Object.keys(webhookData || {}));
 
         // Busca configuração da instância
         const integration = await getIntegrationByInstance(instanceName);
@@ -18,13 +21,30 @@ router.post('/:instanceName', async (req, res) => {
             return res.status(404).json({ error: 'Instância não configurada' });
         }
 
-        // Parse do jsonData que vem como string
+        // Parse do jsonData que vem como string OU objeto
         let parsedData;
-        try {
-            parsedData = JSON.parse(webhookData.jsonData);
-        } catch (parseError) {
-            console.log('⚠️ Erro ao fazer parse do jsonData:', parseError.message);
-            return res.status(400).json({ error: 'Formato de dados inválido' });
+
+        // Se já vier como objeto (alguns webhooks enviam direto)
+        if (typeof webhookData === 'object' && webhookData.type) {
+            console.log('✅ Webhook já veio como objeto JSON');
+            parsedData = webhookData;
+        }
+        // Se vier com jsonData como string (formato antigo)
+        else if (webhookData.jsonData) {
+            try {
+                parsedData = JSON.parse(webhookData.jsonData);
+                console.log('✅ Parse do jsonData realizado com sucesso');
+            } catch (parseError) {
+                console.log('⚠️ Erro ao fazer parse do jsonData:', parseError.message);
+                console.log('⚠️ jsonData recebido:', webhookData.jsonData);
+                return res.status(400).json({ error: 'Formato de dados inválido' });
+            }
+        }
+        // Se não tiver nem type nem jsonData
+        else {
+            console.log('⚠️ Formato de webhook não reconhecido');
+            console.log('⚠️ Dados recebidos:', JSON.stringify(webhookData, null, 2));
+            return res.status(400).json({ error: 'Formato de webhook não reconhecido' });
         }
 
         console.log('📋 Tipo de evento:', parsedData.type);
@@ -134,14 +154,10 @@ router.post('/:instanceName', async (req, res) => {
             const receipt = parsedData.event;
             console.log('📬 Recibo de status recebido:', receipt?.Type);
             
-            // Tipos possíveis: "read", "delivered", "played"
             const statusType = receipt?.Type;
             const messageIds = receipt?.MessageIDs || [];
             
             console.log(`📊 Status "${statusType}" para ${messageIds.length} mensagens`);
-            
-            // Aqui você pode atualizar o status no Chatwoot se desejar
-            // Por enquanto, apenas logamos
             
             return res.status(200).json({ 
                 success: true, 
