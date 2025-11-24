@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getIntegrationByInstance } = require('../database/sqlite');
 const ChatwootService = require('../services/chatwoot');
+const WuzAPIService = require('../services/wuzapi');
 
 // Cache de mensagens enviadas pelo Chatwoot (IDs das últimas mensagens enviadas)
 const chatwootMessageCache = new Map();
@@ -106,26 +107,55 @@ router.post('/:instanceName', async (req, res) => {
                              message.extendedTextMessage?.text ||
                              '';
 
-            // Trata mensagens de mídia
-            if (!messageText) {
-                if (message.imageMessage) {
-                    messageText = message.imageMessage.caption || '📷 Imagem';
-                } else if (message.videoMessage) {
-                    messageText = message.videoMessage.caption || '🎥 Vídeo';
-                } else if (message.audioMessage) {
-                    messageText = '🎵 Áudio';
-                } else if (message.documentMessage) {
-                    messageText = `📄 ${message.documentMessage.fileName || 'Documento'}`;
-                } else if (message.stickerMessage) {
-                    messageText = '🎨 Sticker';
-                } else {
-                    messageText = '[Mensagem sem conteúdo de texto]';
-                }
+            // Detecta e processa mídia
+            let hasMedia = false;
+            let mediaType = null;
+            let mediaFileName = null;
+            let mediaMimeType = null;
+            let mediaCaption = '';
+
+            if (message.imageMessage) {
+                hasMedia = true;
+                mediaType = 'image';
+                mediaFileName = 'image.jpg';
+                mediaMimeType = message.imageMessage.mimetype || 'image/jpeg';
+                mediaCaption = message.imageMessage.caption || '';
+                messageText = mediaCaption || '📷 Imagem';
+            } else if (message.videoMessage) {
+                hasMedia = true;
+                mediaType = 'video';
+                mediaFileName = 'video.mp4';
+                mediaMimeType = message.videoMessage.mimetype || 'video/mp4';
+                mediaCaption = message.videoMessage.caption || '';
+                messageText = mediaCaption || '🎥 Vídeo';
+            } else if (message.audioMessage) {
+                hasMedia = true;
+                mediaType = 'audio';
+                mediaFileName = 'audio.ogg';
+                mediaMimeType = message.audioMessage.mimetype || 'audio/ogg';
+                messageText = '🎵 Áudio';
+            } else if (message.documentMessage) {
+                hasMedia = true;
+                mediaType = 'document';
+                mediaFileName = message.documentMessage.fileName || 'document.pdf';
+                mediaMimeType = message.documentMessage.mimetype || 'application/pdf';
+                messageText = `📄 ${mediaFileName}`;
+            } else if (message.stickerMessage) {
+                hasMedia = true;
+                mediaType = 'sticker';
+                mediaFileName = 'sticker.webp';
+                mediaMimeType = 'image/webp';
+                messageText = '🎨 Sticker';
+            } else if (!messageText) {
+                messageText = '[Mensagem sem conteúdo de texto]';
             }
 
             console.log('📞 Telefone:', phoneNumber);
             console.log('👤 Nome:', senderName);
             console.log('💬 Mensagem:', messageText);
+            if (hasMedia) {
+                console.log('📎 Mídia detectada:', mediaType);
+            }
 
             try {
                 const chatwoot = new ChatwootService(integration);
@@ -145,6 +175,46 @@ router.post('/:instanceName', async (req, res) => {
                 const messageType = isFromMe === true ? 'outgoing' : 'incoming';
                 console.log(`📝 Tipo de mensagem: ${messageType}`);
 
+                // PROCESSA MÍDIA SE EXISTIR
+                if (hasMedia) {
+                    try {
+                        console.log(`📥 Processando mídia tipo: ${mediaType}`);
+                        
+                        // Baixa mídia do WuzAPI
+                        const wuzapiService = new WuzAPIService(integration);
+                        const mediaBuffer = await wuzapiService.downloadMedia(messageId);
+                        
+                        // Faz upload no Chatwoot
+                        await chatwoot.uploadAttachment(
+                            conversation.id,
+                            mediaBuffer,
+                            mediaFileName,
+                            mediaMimeType
+                        );
+                        
+                        console.log('✅ Mídia enviada para Chatwoot');
+                        
+                        // Se tem legenda, envia como mensagem separada
+                        if (mediaCaption) {
+                            await chatwoot.sendMessage(conversation.id, {
+                                content: mediaCaption,
+                                text: mediaCaption
+                            }, messageType);
+                        }
+                        
+                        return res.status(200).json({ 
+                            success: true,
+                            conversation_id: conversation.id,
+                            contact_id: contact.id
+                        });
+                        
+                    } catch (mediaError) {
+                        console.error('⚠️ Erro ao processar mídia:', mediaError.message);
+                        // Continua e envia mensagem de texto como fallback
+                    }
+                }
+
+                // Envia mensagem de texto (se não tiver mídia ou se mídia falhou)
                 console.log('📤 Enviando mensagem para Chatwoot...');
                 await chatwoot.sendMessage(conversation.id, {
                     content: messageText,
