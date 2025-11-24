@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WuzAPI × Chatwoot - Gerenciador de Integrações</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #6b7280;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #1f2937;
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #374151;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .integrations-list {
+            margin-top: 20px;
+        }
+
+        .integration-item {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .integration-item h3 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+
+        .integration-item p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .integration-item .actions {
+            margin-top: 15px;
+        }
+
+        .integration-item .actions button {
+            margin-right: 10px;
+        }
+
+        .webhook-url {
+            background: #eff6ff;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #bfdbfe;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #1e40af;
+            word-break: break-all;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 WuzAPI × Chatwoot</h1>
+            <p>Gerenciador de Integrações - Configure suas instâncias WhatsApp com Chatwoot</p>
+        </div>
+
+        <div class="card">
+            <h2>➕ Nova Integração</h2>
+            <form id="integrationForm">
+                <div class="form-group">
+                    <label>Nome da Instância *</label>
+                    <input type="text" id="instance_name" required placeholder="Ex: atendimento, vendas, suporte">
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>URL do WuzAPI *</label>
+                        <input type="text" id="wuzapi_url" required placeholder="https://wuzapi-wuzapi.icbiov.easypanel.host">
+                    </div>
+                    <div class="form-group">
+                        <label>Token WuzAPI *</label>
+                        <input type="text" id="wuzapi_token" required placeholder="TOKENADMIN">
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>URL do Chatwoot *</label>
+                        <input type="text" id="chatwoot_url" required placeholder="https://smarthubbrasil-chatwoot.cloudfy.cloud">
+                    </div>
+                    <div class="form-group">
+                        <label>Account ID do Chatwoot *</label>
+                        <input type="number" id="chatwoot_account_id" required placeholder="2">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>API Token do Chatwoot *</label>
+                    <input type="text" id="chatwoot_api_token" required placeholder="1mgBaySLLHqz8HCfEk2Tjydj">
+                </div>
+
+                <button type="submit" class="btn btn-primary">💾 Criar Integração</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>📋 Integrações Ativas</h2>
+            <div id="integrationsList" class="integrations-list">
+                <p style="color: #6b7280;">Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/admin';
+
+        // Carrega integrações
+        async function loadIntegrations() {
+            try {
+                const response = await fetch(`${API_BASE}/integrations`);
+                const integrations = await response.json();
+                
+                const container = document.getElementById('integrationsList');
+                
+                if (integrations.length === 0) {
+                    container.innerHTML = '<p style="color: #6b7280;">Nenhuma integração configurada ainda.</p>';
+                    return;
+                }
+
+                container.innerHTML = integrations.map(integration => `
+                    <div class="integration-item">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <h3>📱 ${integration.instance_name}</h3>
+                                <span class="status-badge ${integration.enabled ? 'status-active' : 'status-inactive'}">
+                                    ${integration.enabled ? '✓ Ativa' : '✕ Inativa'}
+                                </span>
+                            </div>
+                            <div class="actions">
+                                <button class="btn btn-danger" onclick="deleteIntegration(${integration.id})">
+                                    🗑️ Deletar
+                                </button>
+                            </div>
+                        </div>
+                        <p><strong>WuzAPI:</strong> ${integration.wuzapi_url}</p>
+                        <p><strong>Chatwoot:</strong> ${integration.chatwoot_url} (Account: ${integration.chatwoot_account_id})</p>
+                        <p><strong>Inbox ID:</strong> ${integration.chatwoot_inbox_id || 'Não configurado'}</p>
+                        <p><strong>Criada em:</strong> ${new Date(integration.created_at).toLocaleString('pt-BR')}</p>
+                        <div class="webhook-url">
+                            <strong>URL do Webhook (configure no WuzAPI):</strong><br>
+                            ${window.location.origin}/webhook/${integration.instance_name}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Erro ao carregar integrações:', error);
+                document.getElementById('integrationsList').innerHTML = 
+                    '<p style="color: #ef4444;">Erro ao carregar integrações.</p>';
+            }
+        }
+
+        // Cria nova integração
+        document.getElementById('integrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                instance_name: document.getElementById('instance_name').value,
+                wuzapi_url: document.getElementById('wuzapi_url').value,
+                wuzapi_token: document.getElementById('wuzapi_token').value,
+                chatwoot_url: document.getElementById('chatwoot_url').value,
+                chatwoot_account_id: parseInt(document.getElementById('chatwoot_account_id').value),
+                chatwoot_api_token: document.getElementById('chatwoot_api_token').value
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/integrations`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Integração criada com sucesso!\n\nAGORA CONFIGURE O WEBHOOK NO WUZAPI:\n' + result.webhook_url);
+                    document.getElementById('integrationForm').reset();
+                    loadIntegrations();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar integração: ' + error.message);
+            }
+        });
+
+        // Deleta integração
+        async function deleteIntegration(id) {
+            if (!confirm('Tem certeza que deseja deletar esta integração?')) return;
+
+            try {
+                await fetch(`${API_BASE}/integrations/${id}`, { method: 'DELETE' });
+                alert('✅ Integração deletada com sucesso!');
+                loadIntegrations();
+            } catch (error) {
+                alert('❌ Erro ao deletar: ' + error.message);
+            }
+        }
+
+        // Carrega ao iniciar
+        loadIntegrations();
+    </script>
+</body>
+</html>
