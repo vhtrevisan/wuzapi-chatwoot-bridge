@@ -14,6 +14,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Rotas
 app.use('/webhook', require('./routes/webhook'));
 app.use('/admin', require('./routes/admin'));
+app.use('/chatwoot', require('./routes/chatwoot'));  // ← NOVA ROTA!
 
 // Rota raiz
 app.get('/', (req, res) => {
@@ -37,6 +38,7 @@ initDatabase().then(() => {
         console.log(`🚀 Servidor rodando na porta ${PORT}`);
         console.log(`📊 Interface admin: http://localhost:${PORT}`);
         console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
+        console.log(`🔗 Chatwoot events: http://localhost:${PORT}/chatwoot/events`);
     });
 }).catch(error => {
     console.error('❌ Erro ao inicializar banco de dados:', error);
