@@ -181,52 +181,83 @@ router.post('/:instanceName', async (req, res) => {
                     try {
                         console.log(`📥 Processando mídia tipo: ${mediaType}`);
                         
-                        // EXTRAI/BAIXA MÍDIA DO WEBHOOK
+                        // EXTRAI TODOS OS PARÂMETROS DA MÍDIA
                         let mediaBuffer = null;
-                        let mediaUrl = null;
-                        
-                        // Extrai URL da mídia baseado no tipo
+                        let mediaData = null;
+
                         if (mediaType === 'image' && message.imageMessage) {
-                            mediaUrl = message.imageMessage.URL;
+                            mediaData = message.imageMessage;
                         } else if (mediaType === 'video' && message.videoMessage) {
-                            mediaUrl = message.videoMessage.URL;
+                            mediaData = message.videoMessage;
                         } else if (mediaType === 'audio' && message.audioMessage) {
-                            mediaUrl = message.audioMessage.URL;
+                            mediaData = message.audioMessage;
                         } else if (mediaType === 'document' && message.documentMessage) {
-                            mediaUrl = message.documentMessage.URL;
+                            mediaData = message.documentMessage;
                         } else if (mediaType === 'sticker' && message.stickerMessage) {
-                            mediaUrl = message.stickerMessage.URL;
+                            mediaData = message.stickerMessage;
                         }
-                        
-                        if (!mediaUrl) {
-                            throw new Error('URL da mídia não encontrada no webhook');
+
+                        if (!mediaData) {
+                            throw new Error('Dados da mídia não encontrados no webhook');
                         }
-                        
-                        console.log(`🔗 URL da mídia encontrada (${mediaUrl.length} chars)`);
-                        
-                        // Verifica se é URL HTTP ou base64
-                        if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-                            // É uma URL - faz download
-                            console.log(`⬇️ Baixando mídia de: ${mediaUrl.substring(0, 100)}...`);
-                            
-                            const response = await axios.get(mediaUrl, {
-                                responseType: 'arraybuffer',
-                                timeout: 30000
-                            });
-                            
-                            mediaBuffer = Buffer.from(response.data);
-                            console.log(`✅ Mídia baixada (${Math.round(mediaBuffer.length / 1024)}KB)`);
-                            
-                        } else {
-                            // É base64 - converte para Buffer
-                            console.log(`🔄 Convertendo base64 para buffer`);
-                            const base64Data = mediaUrl.replace(/^data:.*?;base64,/, '');
-                            mediaBuffer = Buffer.from(base64Data, 'base64');
-                            console.log(`✅ Base64 convertido (${Math.round(mediaBuffer.length / 1024)}KB)`);
+
+                        console.log(`🔍 Preparando download via WuzAPI`);
+
+                        // Monta payload com TODOS os parâmetros necessários para descriptografia
+                        const downloadPayload = {
+                            Url: mediaData.URL || mediaData.url,
+                            DirectPath: mediaData.directPath,
+                            MediaKey: mediaData.mediaKey,
+                            Mimetype: mediaData.mimetype,
+                            FileEncSHA256: mediaData.fileEncSha256,
+                            FileSHA256: mediaData.fileSha256,
+                            FileLength: mediaData.fileLength || 0
+                        };
+
+                        console.log(`🔐 Parâmetros de descriptografia extraídos`);
+
+                        // Define endpoint correto baseado no tipo
+                        let downloadEndpoint = '';
+                        if (mediaType === 'image') {
+                            downloadEndpoint = '/chat/downloadimage';
+                        } else if (mediaType === 'video') {
+                            downloadEndpoint = '/chat/downloadvideo';
+                        } else if (mediaType === 'audio') {
+                            downloadEndpoint = '/chat/downloadaudio';
+                        } else if (mediaType === 'document') {
+                            downloadEndpoint = '/chat/downloaddocument';
+                        } else if (mediaType === 'sticker') {
+                            downloadEndpoint = '/chat/downloadimage'; // Sticker usa endpoint de imagem
                         }
-                        
+
+                        console.log(`⬇️ Baixando mídia via: ${integration.wuzapi_url}${downloadEndpoint}`);
+
+                        // Faz request para WuzAPI descriptografar
+                        const wuzapiResponse = await axios.post(
+                            `${integration.wuzapi_url}${downloadEndpoint}?token=${integration.wuzapi_token}`,
+                            downloadPayload,
+                            {
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                timeout: 60000
+                            }
+                        );
+
+                        if (!wuzapiResponse.data || !wuzapiResponse.data.mimetype || !wuzapiResponse.data.data) {
+                            throw new Error('WuzAPI não retornou dados válidos');
+                        }
+
+                        console.log(`✅ Mídia descriptografada pelo WuzAPI (${wuzapiResponse.data.mimetype})`);
+
+                        // Converte base64 para buffer
+                        const base64Data = wuzapiResponse.data.data.replace(/^data:.*?;base64,/, '');
+                        mediaBuffer = Buffer.from(base64Data, 'base64');
+
+                        console.log(`✅ Buffer criado (${Math.round(mediaBuffer.length / 1024)}KB)`);
+
                         if (!mediaBuffer || mediaBuffer.length === 0) {
-                            throw new Error('Buffer de mídia vazio');
+                            throw new Error('Buffer de mídia vazio após descriptografia');
                         }
                         
                         console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
@@ -237,7 +268,7 @@ router.post('/:instanceName', async (req, res) => {
                             mediaBuffer,
                             mediaFileName,
                             mediaMimeType,
-                            mediaCaption || `📎 ${mediaFileName}`  // ← CORRIGIDO: 5º parâmetro
+                            mediaCaption || `📎 ${mediaFileName}`
                         );
                         
                         console.log('✅ Mídia enviada para Chatwoot');
