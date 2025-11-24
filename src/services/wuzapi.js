@@ -54,24 +54,21 @@ class WuzAPIService {
     }
 
     /**
-     * Baixa mídia do WhatsApp usando messageId
+     * Baixa mídia diretamente da URL (vinda do webhook do WhatsApp)
      */
-    async downloadMedia(messageId) {
+    async downloadMediaFromUrl(url) {
         try {
-            console.log(`📥 Baixando mídia: ${messageId}`);
+            console.log(`📥 Baixando mídia da URL: ${url.substring(0, 50)}...`);
             
-            const response = await this.client.get('/chat/download-media', {
-                params: { 
-                    token: this.token,
-                    MessageID: messageId
-                },
-                responseType: 'arraybuffer'
+            const response = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 30000
             });
 
-            console.log(`✅ Mídia baixada com sucesso`);
+            console.log(`✅ Mídia baixada com sucesso (${response.data.length} bytes)`);
             return response.data;
         } catch (error) {
-            console.error('❌ Erro ao baixar mídia:', error.message);
+            console.error('❌ Erro ao baixar mídia da URL:', error.message);
             throw error;
         }
     }
