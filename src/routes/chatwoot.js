@@ -50,6 +50,14 @@ router.post('/events', async (req, res) => {
         const messageContent = event.content || '';
         let attachments = event.attachments || [];
 
+        // VALIDA CONTEÚDO - Ignora mensagens vazias ou "nil"
+        if (!messageContent || messageContent === 'nil' || messageContent.trim() === '') {
+            if (!attachments || attachments.length === 0) {
+                console.log('⏭️ Mensagem vazia ignorada');
+                return res.status(200).json({ success: true, message: 'Empty message ignored' });
+            }
+        }
+
         // Extrai nome do arquivo da URL se não vier no attachment
         attachments = attachments.map(att => {
             let fileName = att.fallback_title || att.file_name || 'file';
@@ -74,12 +82,6 @@ router.post('/events', async (req, res) => {
                 file_name: fileName
             };
         });
-
-        // Verifica se tem conteúdo OU anexos
-        if (!messageContent && attachments.length === 0) {
-            console.log('⚠️ Mensagem sem conteúdo e sem anexos');
-            return res.status(400).json({ error: 'Mensagem sem conteúdo' });
-        }
 
         console.log('📤 Enviando para WhatsApp:', phoneNumber);
         console.log('📝 Texto:', messageContent || '(sem texto)');
