@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const { getIntegrationByInstance } = require('../database/sqlite');
 const ChatwootService = require('../services/chatwoot');
 const WuzAPIService = require('../services/wuzapi');
@@ -180,34 +181,53 @@ router.post('/:instanceName', async (req, res) => {
                     try {
                         console.log(`📥 Processando mídia tipo: ${mediaType}`);
                         
-                        // EXTRAI BASE64 DO WEBHOOK (mídia já vem no webhook!)
-                        let mediaBase64 = null;
+                        // EXTRAI/BAIXA MÍDIA DO WEBHOOK
                         let mediaBuffer = null;
+                        let mediaUrl = null;
                         
+                        // Extrai URL da mídia baseado no tipo
                         if (mediaType === 'image' && message.imageMessage) {
-                            // Campo é URL (MAIÚSCULO), não url!
-                            mediaBase64 = message.imageMessage.URL || 
-                                         message.imageMessage.JPEGThumbnail;
+                            mediaUrl = message.imageMessage.URL;
                         } else if (mediaType === 'video' && message.videoMessage) {
-                            mediaBase64 = message.videoMessage.URL;
+                            mediaUrl = message.videoMessage.URL;
                         } else if (mediaType === 'audio' && message.audioMessage) {
-                            mediaBase64 = message.audioMessage.URL;
+                            mediaUrl = message.audioMessage.URL;
                         } else if (mediaType === 'document' && message.documentMessage) {
-                            mediaBase64 = message.documentMessage.URL;
+                            mediaUrl = message.documentMessage.URL;
                         } else if (mediaType === 'sticker' && message.stickerMessage) {
-                            mediaBase64 = message.stickerMessage.URL;
+                            mediaUrl = message.stickerMessage.URL;
                         }
                         
-                        if (!mediaBase64) {
+                        if (!mediaUrl) {
                             throw new Error('URL da mídia não encontrada no webhook');
                         }
                         
-                        console.log(`✅ Base64 extraído (${Math.round(mediaBase64.length / 1024)}KB)`);
+                        console.log(`🔗 URL da mídia encontrada (${mediaUrl.length} chars)`);
                         
-                        // Converte base64 para Buffer
-                        // Remove prefixo "data:image/jpeg;base64," se existir
-                        const base64Data = mediaBase64.replace(/^data:.*?;base64,/, '');
-                        mediaBuffer = Buffer.from(base64Data, 'base64');
+                        // Verifica se é URL HTTP ou base64
+                        if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+                            // É uma URL - faz download
+                            console.log(`⬇️ Baixando mídia de: ${mediaUrl.substring(0, 100)}...`);
+                            
+                            const response = await axios.get(mediaUrl, {
+                                responseType: 'arraybuffer',
+                                timeout: 30000
+                            });
+                            
+                            mediaBuffer = Buffer.from(response.data);
+                            console.log(`✅ Mídia baixada (${Math.round(mediaBuffer.length / 1024)}KB)`);
+                            
+                        } else {
+                            // É base64 - converte para Buffer
+                            console.log(`🔄 Convertendo base64 para buffer`);
+                            const base64Data = mediaUrl.replace(/^data:.*?;base64,/, '');
+                            mediaBuffer = Buffer.from(base64Data, 'base64');
+                            console.log(`✅ Base64 convertido (${Math.round(mediaBuffer.length / 1024)}KB)`);
+                        }
+                        
+                        if (!mediaBuffer || mediaBuffer.length === 0) {
+                            throw new Error('Buffer de mídia vazio');
+                        }
                         
                         console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
                         
@@ -237,6 +257,7 @@ router.post('/:instanceName', async (req, res) => {
                         
                     } catch (mediaError) {
                         console.error('⚠️ Erro ao processar mídia:', mediaError.message);
+                        console.error('⚠️ Stack:', mediaError.stack);
                         // Continua e envia mensagem de texto como fallback
                     }
                 }
