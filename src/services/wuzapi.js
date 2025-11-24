@@ -53,6 +53,29 @@ class WuzAPIService {
         }
     }
 
+    /**
+     * Baixa mídia do WhatsApp usando messageId
+     */
+    async downloadMedia(messageId) {
+        try {
+            console.log(`📥 Baixando mídia: ${messageId}`);
+            
+            const response = await this.client.get('/chat/download-media', {
+                params: { 
+                    token: this.token,
+                    MessageID: messageId
+                },
+                responseType: 'arraybuffer'
+            });
+
+            console.log(`✅ Mídia baixada com sucesso`);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Erro ao baixar mídia:', error.message);
+            throw error;
+        }
+    }
+
     async sendTextMessage(phoneNumber, message) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
