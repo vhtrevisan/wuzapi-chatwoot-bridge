@@ -15,6 +15,12 @@ router.post('/events', async (req, res) => {
             return res.status(200).json({ success: true });
         }
 
+        // Ignora mensagens que vieram do WhatsApp Web (têm source_id)
+        if (event.source_id && event.source_id.startsWith('wuzapi_')) {
+            console.log('⏭️ Mensagem ignorada (veio do WhatsApp Web via middleware)');
+            return res.status(200).json({ success: true });
+        }
+
         if (event.message_type !== 'outgoing') {
             console.log('⏭️ Mensagem ignorada (não é outgoing)');
             return res.status(200).json({ success: true });
