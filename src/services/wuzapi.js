@@ -13,6 +13,30 @@ class WuzAPIService {
         });
     }
 
+    /**
+     * Baixa um arquivo de uma URL e converte para Base64
+     */
+    async downloadAndConvertToBase64(url, mimeType) {
+        try {
+            console.log(`⬇️ Baixando arquivo de: ${url}`);
+            
+            const response = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 30000 // 30 segundos
+            });
+
+            const base64 = Buffer.from(response.data, 'binary').toString('base64');
+            const dataUri = `data:${mimeType};base64,${base64}`;
+            
+            console.log(`✅ Arquivo convertido para Base64 (${Math.round(base64.length / 1024)}KB)`);
+            
+            return dataUri;
+        } catch (error) {
+            console.error('❌ Erro ao baixar/converter arquivo:', error.message);
+            throw new Error(`Falha ao processar arquivo: ${error.message}`);
+        }
+    }
+
     async sendTextMessage(phoneNumber, message) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
@@ -35,17 +59,16 @@ class WuzAPIService {
         }
     }
 
-    async sendImageMessage(phoneNumber, imageUrl, caption = '') {
+    async sendImageMessage(phoneNumber, imageData, caption = '') {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
             console.log(`📸 Enviando IMAGEM via WuzAPI para: ${cleanNumber}`);
-            console.log(`🔗 URL: ${imageUrl}`);
             console.log(`📝 Legenda: ${caption || '(sem legenda)'}`);
 
             const response = await this.client.post('/chat/send/image', {
                 Phone: cleanNumber,
-                Image: imageUrl,
+                Image: imageData, // Base64
                 Caption: caption
             }, {
                 params: { token: this.token }
@@ -59,17 +82,16 @@ class WuzAPIService {
         }
     }
 
-    async sendVideoMessage(phoneNumber, videoUrl, caption = '') {
+    async sendVideoMessage(phoneNumber, videoData, caption = '') {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
             console.log(`🎥 Enviando VÍDEO via WuzAPI para: ${cleanNumber}`);
-            console.log(`🔗 URL: ${videoUrl}`);
             console.log(`📝 Legenda: ${caption || '(sem legenda)'}`);
 
             const response = await this.client.post('/chat/send/video', {
                 Phone: cleanNumber,
-                Video: videoUrl,
+                Video: videoData, // Base64
                 Caption: caption
             }, {
                 params: { token: this.token }
@@ -83,16 +105,15 @@ class WuzAPIService {
         }
     }
 
-    async sendAudioMessage(phoneNumber, audioUrl) {
+    async sendAudioMessage(phoneNumber, audioData) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
             console.log(`🎵 Enviando ÁUDIO via WuzAPI para: ${cleanNumber}`);
-            console.log(`🔗 URL: ${audioUrl}`);
 
             const response = await this.client.post('/chat/send/audio', {
                 Phone: cleanNumber,
-                Audio: audioUrl
+                Audio: audioData // Base64
             }, {
                 params: { token: this.token }
             });
@@ -105,17 +126,16 @@ class WuzAPIService {
         }
     }
 
-    async sendDocumentMessage(phoneNumber, documentUrl, fileName = 'document') {
+    async sendDocumentMessage(phoneNumber, documentData, fileName = 'document') {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
             console.log(`📄 Enviando DOCUMENTO via WuzAPI para: ${cleanNumber}`);
-            console.log(`🔗 URL: ${documentUrl}`);
             console.log(`📝 Nome: ${fileName}`);
 
             const response = await this.client.post('/chat/send/document', {
                 Phone: cleanNumber,
-                Document: documentUrl,
+                Document: documentData, // Base64
                 FileName: fileName
             }, {
                 params: { token: this.token }
@@ -129,7 +149,9 @@ class WuzAPIService {
         }
     }
 
-    // Método genérico que detecta o tipo e chama o método apropriado
+    /**
+     * Método genérico que detecta o tipo e chama o método apropriado
+     */
     async sendMessage(phoneNumber, content, attachments = []) {
         try {
             // Se tem anexos, processa cada um
@@ -137,22 +159,35 @@ class WuzAPIService {
                 for (const attachment of attachments) {
                     const fileUrl = attachment.data_url;
                     const fileType = attachment.file_type || '';
-                    const fileName = attachment.file_name || 'file';
+                    const fileName = attachment.fallback_title || attachment.file_name || 'file';
 
+                    console.log(`📎 Processando anexo: ${fileName} (${fileType})`);
+
+                    // Baixa e converte para Base64
+                    let base64Data;
+                    
                     if (fileType.startsWith('image/')) {
-                        await this.sendImageMessage(phoneNumber, fileUrl, content);
+                        base64Data = await this.downloadAndConvertToBase64(fileUrl, fileType);
+                        await this.sendImageMessage(phoneNumber, base64Data, content);
                     } else if (fileType.startsWith('video/')) {
-                        await this.sendVideoMessage(phoneNumber, fileUrl, content);
+                        base64Data = await this.downloadAndConvertToBase64(fileUrl, fileType);
+                        await this.sendVideoMessage(phoneNumber, base64Data, content);
                     } else if (fileType.startsWith('audio/')) {
-                        await this.sendAudioMessage(phoneNumber, fileUrl);
+                        base64Data = await this.downloadAndConvertToBase64(fileUrl, fileType);
+                        await this.sendAudioMessage(phoneNumber, base64Data);
                     } else {
-                        await this.sendDocumentMessage(phoneNumber, fileUrl, fileName);
+                        // Documento genérico
+                        base64Data = await this.downloadAndConvertToBase64(fileUrl, 'application/octet-stream');
+                        await this.sendDocumentMessage(phoneNumber, base64Data, fileName);
                     }
                 }
-            } else if (content) {
-                // Sem anexos, envia texto
+            } 
+            
+            // Se tem texto sem anexos, ou texto adicional após anexos
+            if (content && attachments.length === 0) {
                 await this.sendTextMessage(phoneNumber, content);
             }
+
         } catch (error) {
             console.error('❌ Erro ao enviar mensagem:', error.message);
             throw error;
