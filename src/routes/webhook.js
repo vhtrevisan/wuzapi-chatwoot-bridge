@@ -78,14 +78,28 @@ router.post('/:instanceName', async (req, res) => {
             // MARCA MENSAGEM COMO PROCESSADA IMEDIATAMENTE
             chatwootMessageCache.set(messageId, Date.now());
 
-            // Extrai número de telefone
-            let phoneNumber = info.Sender || info.Chat || '';
+            // Extrai número de telefone CORRETO
+            let phoneNumber;
+            if (isFromMe === true) {
+                // Se mensagem foi enviada por você (WhatsApp Web), pega o DESTINATÁRIO (Chat)
+                phoneNumber = info.Chat || '';
+            } else {
+                // Se mensagem foi recebida, pega o REMETENTE (Sender)
+                phoneNumber = info.Sender || info.Chat || '';
+            }
+
             phoneNumber = phoneNumber.replace('@s.whatsapp.net', '')
                                      .replace('@c.us', '')
                                      .replace('@lid', '')
                                      .split(':')[0];
 
             const senderName = info.PushName || phoneNumber;
+
+            // VALIDA: Ignora se número estiver vazio
+            if (!phoneNumber) {
+                console.log('⚠️ Número de telefone não encontrado');
+                return res.status(400).json({ error: 'Número de telefone não encontrado' });
+            }
 
             // Extrai texto da mensagem
             let messageText = message.conversation || 
@@ -112,11 +126,6 @@ router.post('/:instanceName', async (req, res) => {
             console.log('📞 Telefone:', phoneNumber);
             console.log('👤 Nome:', senderName);
             console.log('💬 Mensagem:', messageText);
-
-            if (!phoneNumber) {
-                console.log('⚠️ Número de telefone não encontrado');
-                return res.status(400).json({ error: 'Número de telefone não encontrado' });
-            }
 
             try {
                 const chatwoot = new ChatwootService(integration);
