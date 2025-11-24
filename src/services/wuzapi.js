@@ -14,6 +14,22 @@ class WuzAPIService {
     }
 
     /**
+     * Adiciona ID de mensagem ao cache para evitar duplicação
+     */
+    addMessageToCache(messageId) {
+        if (messageId) {
+            try {
+                const webhookRouter = require('../routes/webhook');
+                if (webhookRouter.addToChatwootCache) {
+                    webhookRouter.addToChatwootCache(messageId);
+                }
+            } catch (err) {
+                console.log('⚠️ Não foi possível adicionar ao cache:', err.message);
+            }
+        }
+    }
+
+    /**
      * Baixa um arquivo de uma URL e converte para Base64
      */
     async downloadAndConvertToBase64(url, mimeType) {
@@ -52,6 +68,11 @@ class WuzAPIService {
             });
 
             console.log('✅ Texto enviado com sucesso!');
+            
+            // Adiciona ID ao cache
+            const messageId = response.data?.data?.Id;
+            this.addMessageToCache(messageId);
+            
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao enviar texto:', error.response?.data || error.message);
@@ -75,6 +96,11 @@ class WuzAPIService {
             });
 
             console.log('✅ Imagem enviada com sucesso!');
+            
+            // Adiciona ID ao cache
+            const messageId = response.data?.data?.Id;
+            this.addMessageToCache(messageId);
+            
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao enviar imagem:', error.response?.data || error.message);
@@ -98,6 +124,11 @@ class WuzAPIService {
             });
 
             console.log('✅ Vídeo enviado com sucesso!');
+            
+            // Adiciona ID ao cache
+            const messageId = response.data?.data?.Id;
+            this.addMessageToCache(messageId);
+            
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao enviar vídeo:', error.response?.data || error.message);
@@ -119,6 +150,11 @@ class WuzAPIService {
             });
 
             console.log('✅ Áudio enviado com sucesso!');
+            
+            // Adiciona ID ao cache
+            const messageId = response.data?.data?.Id;
+            this.addMessageToCache(messageId);
+            
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao enviar áudio:', error.response?.data || error.message);
@@ -142,6 +178,11 @@ class WuzAPIService {
             });
 
             console.log('✅ Documento enviado com sucesso!');
+            
+            // Adiciona ID ao cache
+            const messageId = response.data?.data?.Id;
+            this.addMessageToCache(messageId);
+            
             return response.data;
         } catch (error) {
             console.error('❌ Erro ao enviar documento:', error.response?.data || error.message);
