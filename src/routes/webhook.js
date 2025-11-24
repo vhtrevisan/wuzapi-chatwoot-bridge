@@ -231,12 +231,13 @@ router.post('/:instanceName', async (req, res) => {
                         
                         console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
                         
-                        // Faz upload no Chatwoot
+                        // Faz upload no Chatwoot COM LEGENDA
                         await chatwoot.uploadAttachment(
                             conversation.id,
                             mediaBuffer,
                             mediaFileName,
-                            mediaMimeType
+                            mediaMimeType,
+                            mediaCaption || `📎 ${mediaFileName}`  // ← CORRIGIDO: 5º parâmetro
                         );
                         
                         console.log('✅ Mídia enviada para Chatwoot');
