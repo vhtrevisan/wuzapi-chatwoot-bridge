@@ -21,8 +21,7 @@ class ChatwootService {
                 name: name,
                 channel: {
                     type: 'api',
-                    webhook_url: '',
-                    phone_number: phoneNumber
+                    webhook_url: ''
                 }
             });
             return response.data;
@@ -38,10 +37,9 @@ class ChatwootService {
             const inboxResponse = await this.client.get(`/accounts/${this.accountId}/inboxes/${inboxId}`);
             const inbox = inboxResponse.data;
 
-            // Cria um contato especial para a mensagem de boas-vindas
+            // Cria um contato especial para a mensagem de boas-vindas (sem telefone)
             const welcomeContact = await this.client.post(`/accounts/${this.accountId}/contacts`, {
-                name: '🤖 Sistema - Integração WuzAPI',
-                phone_number: '+0000000000'
+                name: '🤖 Sistema - Integração WuzAPI'
             });
 
             // Cria uma conversa
@@ -96,18 +94,18 @@ class ChatwootService {
 
     async getOrCreateContact(phoneNumber, name) {
         try {
-            // Formata número para busca
-            const formattedPhone = phoneNumber.replace(/[^\d]/g, '');
+            // Formata número para busca (remove caracteres especiais)
+            const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
             
             // Busca contato existente por telefone
             const searchResponse = await this.client.get(`/accounts/${this.accountId}/contacts/search`, {
-                params: { q: formattedPhone }
+                params: { q: cleanPhone }
             });
 
             // Verifica se encontrou contato com o mesmo telefone
             const existingContact = searchResponse.data.payload.find(contact => {
                 const contactPhone = (contact.phone_number || '').replace(/[^\d]/g, '');
-                return contactPhone === formattedPhone;
+                return contactPhone === cleanPhone;
             });
 
             if (existingContact) {
@@ -115,10 +113,12 @@ class ChatwootService {
                 return existingContact;
             }
 
-            // Cria novo contato
+            // Cria novo contato com telefone em formato E.164
+            const formattedPhone = cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`;
+            
             const createResponse = await this.client.post(`/accounts/${this.accountId}/contacts`, {
                 name: name || `WhatsApp ${phoneNumber}`,
-                phone_number: `+${formattedPhone}`
+                phone_number: formattedPhone
             });
 
             console.log(`✅ Novo contato criado: ${createResponse.data.payload.contact.id}`);
