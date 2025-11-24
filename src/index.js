@@ -1,44 +1,44 @@
-require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
 const path = require('path');
-const adminRoutes = require('./routes/admin');
-const webhookRoutes = require('./routes/webhook');
 const { initDatabase } = require('./database/sqlite');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Middlewares
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// CRÍTICO: Aumenta limite do body-parser para aceitar payloads grandes do WuzAPI
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve arquivos estáticos (interface web)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Inicializa banco de dados
-initDatabase();
-
 // Rotas
-app.use('/admin', adminRoutes);
-app.use('/webhook', webhookRoutes);
+app.use('/webhook', require('./routes/webhook'));
+app.use('/admin', require('./routes/admin'));
+
+// Rota raiz
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Health check
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
-        service: 'wuzapi-chatwoot-bridge'
+        uptime: process.uptime()
     });
 });
 
-// Página inicial redireciona para interface
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// Inicializa banco de dados e servidor
+const PORT = process.env.PORT || 80;
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`📊 Interface admin: http://localhost:${PORT}`);
-    console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
+initDatabase().then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Servidor rodando na porta ${PORT}`);
+        console.log(`📊 Interface admin: http://localhost:${PORT}`);
+        console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
+    });
+}).catch(error => {
+    console.error('❌ Erro ao inicializar banco de dados:', error);
+    process.exit(1);
 });
