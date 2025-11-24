@@ -48,7 +48,32 @@ router.post('/events', async (req, res) => {
         }
 
         const messageContent = event.content || '';
-        const attachments = event.attachments || [];
+        let attachments = event.attachments || [];
+
+        // Extrai nome do arquivo da URL se não vier no attachment
+        attachments = attachments.map(att => {
+            let fileName = att.fallback_title || att.file_name || 'file';
+            
+            // Se o nome for genérico, tenta extrair da URL
+            if (fileName === 'file' && att.data_url) {
+                try {
+                    const urlParts = att.data_url.split('/');
+                    const lastPart = urlParts[urlParts.length - 1];
+                    // Decodifica URL encoding
+                    const decodedName = decodeURIComponent(lastPart);
+                    if (decodedName && decodedName.length > 0 && decodedName !== 'file') {
+                        fileName = decodedName;
+                    }
+                } catch (e) {
+                    console.log('⚠️ Erro ao extrair nome da URL:', e.message);
+                }
+            }
+            
+            return {
+                ...att,
+                file_name: fileName
+            };
+        });
 
         // Verifica se tem conteúdo OU anexos
         if (!messageContent && attachments.length === 0) {
@@ -59,6 +84,14 @@ router.post('/events', async (req, res) => {
         console.log('📤 Enviando para WhatsApp:', phoneNumber);
         console.log('📝 Texto:', messageContent || '(sem texto)');
         console.log('📎 Anexos:', attachments.length);
+        
+        if (attachments.length > 0) {
+            console.log('📋 Detalhes dos anexos:', attachments.map(a => ({
+                name: a.file_name,
+                type: a.file_type,
+                url: a.data_url
+            })));
+        }
 
         // Envia mensagem via WuzAPI
         const wuzapi = new WuzAPIService(integration);
