@@ -84,6 +84,42 @@ class ChatwootService {
         }
     }
 
+    /**
+     * Faz upload de attachment no Chatwoot
+     */
+    async uploadAttachment(conversationId, fileBuffer, fileName, mimeType) {
+        try {
+            const FormData = require('form-data');
+            const form = new FormData();
+            
+            form.append('attachments[]', fileBuffer, {
+                filename: fileName,
+                contentType: mimeType
+            });
+
+            form.append('message_type', 'incoming');
+
+            console.log(`📤 Fazendo upload de: ${fileName} (${mimeType})`);
+
+            const response = await this.client.post(
+                `/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
+                form,
+                {
+                    headers: {
+                        ...form.getHeaders(),
+                        'api_access_token': this.apiToken
+                    }
+                }
+            );
+
+            console.log(`✅ Upload concluído: ${fileName}`);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Erro ao fazer upload:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
     async sendMessage(conversationId, content, messageType = 'incoming') {
         try {
             await this.client.post(`/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`, {
