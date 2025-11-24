@@ -22,7 +22,7 @@ class WuzAPIService {
             
             const response = await axios.get(url, {
                 responseType: 'arraybuffer',
-                timeout: 30000 // 30 segundos
+                timeout: 30000
             });
 
             const base64 = Buffer.from(response.data, 'binary').toString('base64');
@@ -159,7 +159,7 @@ class WuzAPIService {
                 for (const attachment of attachments) {
                     const fileUrl = attachment.data_url;
                     let fileType = attachment.file_type || '';
-                    const fileName = attachment.fallback_title || attachment.file_name || 'file';
+                    const fileName = attachment.file_name || 'file';
 
                     console.log(`📎 Processando anexo: ${fileName}`);
                     console.log(`📋 Tipo original: "${fileType}"`);
@@ -198,11 +198,8 @@ class WuzAPIService {
                         await this.sendVideoMessage(phoneNumber, base64Data, content);
                         
                     } else if (fileType === 'audio') {
-                        let mimeType = 'audio/mpeg';
-                        if (fileName.match(/\.ogg$/i)) mimeType = 'audio/ogg';
-                        else if (fileName.match(/\.wav$/i)) mimeType = 'audio/wav';
-                        
-                        base64Data = await this.downloadAndConvertToBase64(fileUrl, mimeType);
+                        // WuzAPI só aceita audio/ogg - força OGG sempre
+                        base64Data = await this.downloadAndConvertToBase64(fileUrl, 'audio/ogg');
                         await this.sendAudioMessage(phoneNumber, base64Data);
                         
                         // Se tem texto junto com áudio, envia em mensagem separada
