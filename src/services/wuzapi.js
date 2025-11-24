@@ -54,21 +54,51 @@ class WuzAPIService {
     }
 
     /**
-     * Baixa mídia diretamente da URL (vinda do webhook do WhatsApp)
+     * Baixa mídia usando endpoints específicos do WuzAPI
      */
-    async downloadMediaFromUrl(url) {
+    async downloadMedia(messageId, mediaType) {
         try {
-            console.log(`📥 Baixando mídia da URL: ${url.substring(0, 50)}...`);
+            console.log(`📥 Baixando ${mediaType} com MessageID: ${messageId}`);
             
-            const response = await axios.get(url, {
-                responseType: 'arraybuffer',
-                timeout: 30000
+            // Define endpoint baseado no tipo de mídia
+            let endpoint;
+            switch(mediaType) {
+                case 'image':
+                    endpoint = '/chat/downloadimage';
+                    break;
+                case 'video':
+                    endpoint = '/chat/downloadvideo';
+                    break;
+                case 'document':
+                    endpoint = '/chat/downloaddocument';
+                    break;
+                case 'audio':
+                    // Áudio geralmente vem como documento no WuzAPI
+                    endpoint = '/chat/downloaddocument';
+                    break;
+                case 'sticker':
+                    endpoint = '/chat/downloadimage';
+                    break;
+                default:
+                    throw new Error(`Tipo de mídia não suportado: ${mediaType}`);
+            }
+            
+            console.log(`🔗 Usando endpoint: ${endpoint}`);
+            console.log(`📤 Payload: { MessageID: "${messageId}" }`);
+            
+            const response = await this.client.post(endpoint, {
+                MessageID: messageId
+            }, {
+                params: { token: this.token },
+                responseType: 'arraybuffer'
             });
 
             console.log(`✅ Mídia baixada com sucesso (${response.data.length} bytes)`);
             return response.data;
         } catch (error) {
-            console.error('❌ Erro ao baixar mídia da URL:', error.message);
+            console.error('❌ Erro ao baixar mídia:', error.message);
+            console.error('❌ Status:', error.response?.status);
+            console.error('❌ Response:', error.response?.data?.toString() || 'Sem dados');
             throw error;
         }
     }
