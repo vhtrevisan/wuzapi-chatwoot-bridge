@@ -107,13 +107,12 @@ router.post('/:instanceName', async (req, res) => {
                              message.extendedTextMessage?.text ||
                              '';
 
-            // Detecta e processa mídia - PEGA URL DIRETAMENTE DO WEBHOOK
+            // Detecta e processa mídia
             let hasMedia = false;
             let mediaType = null;
             let mediaFileName = null;
             let mediaMimeType = null;
             let mediaCaption = '';
-            let mediaUrl = null;
 
             if (message.imageMessage) {
                 hasMedia = true;
@@ -121,7 +120,6 @@ router.post('/:instanceName', async (req, res) => {
                 mediaFileName = 'image.jpg';
                 mediaMimeType = message.imageMessage.mimetype || 'image/jpeg';
                 mediaCaption = message.imageMessage.caption || '';
-                mediaUrl = message.imageMessage.url || message.imageMessage.directPath;
                 messageText = mediaCaption || '📷 Imagem';
             } else if (message.videoMessage) {
                 hasMedia = true;
@@ -129,28 +127,24 @@ router.post('/:instanceName', async (req, res) => {
                 mediaFileName = 'video.mp4';
                 mediaMimeType = message.videoMessage.mimetype || 'video/mp4';
                 mediaCaption = message.videoMessage.caption || '';
-                mediaUrl = message.videoMessage.url || message.videoMessage.directPath;
                 messageText = mediaCaption || '🎥 Vídeo';
             } else if (message.audioMessage) {
                 hasMedia = true;
                 mediaType = 'audio';
                 mediaFileName = 'audio.ogg';
                 mediaMimeType = message.audioMessage.mimetype || 'audio/ogg';
-                mediaUrl = message.audioMessage.url || message.audioMessage.directPath;
                 messageText = '🎵 Áudio';
             } else if (message.documentMessage) {
                 hasMedia = true;
                 mediaType = 'document';
                 mediaFileName = message.documentMessage.fileName || 'document.pdf';
                 mediaMimeType = message.documentMessage.mimetype || 'application/pdf';
-                mediaUrl = message.documentMessage.url || message.documentMessage.directPath;
                 messageText = `📄 ${mediaFileName}`;
             } else if (message.stickerMessage) {
                 hasMedia = true;
                 mediaType = 'sticker';
                 mediaFileName = 'sticker.webp';
                 mediaMimeType = 'image/webp';
-                mediaUrl = message.stickerMessage.url || message.stickerMessage.directPath;
                 messageText = '🎨 Sticker';
             } else if (!messageText) {
                 messageText = '[Mensagem sem conteúdo de texto]';
@@ -161,7 +155,6 @@ router.post('/:instanceName', async (req, res) => {
             console.log('💬 Mensagem:', messageText);
             if (hasMedia) {
                 console.log('📎 Mídia detectada:', mediaType);
-                console.log('🔗 URL da mídia:', mediaUrl || 'URL não encontrada');
             }
 
             try {
@@ -182,14 +175,14 @@ router.post('/:instanceName', async (req, res) => {
                 const messageType = isFromMe === true ? 'outgoing' : 'incoming';
                 console.log(`📝 Tipo de mensagem: ${messageType}`);
 
-                // PROCESSA MÍDIA SE EXISTIR E TIVER URL
-                if (hasMedia && mediaUrl) {
+                // PROCESSA MÍDIA SE EXISTIR
+                if (hasMedia) {
                     try {
                         console.log(`📥 Processando mídia tipo: ${mediaType}`);
                         
-                        // Baixa mídia da URL direta
+                        // Baixa mídia usando MessageID
                         const wuzapiService = new WuzAPIService(integration);
-                        const mediaBuffer = await wuzapiService.downloadMediaFromUrl(mediaUrl);
+                        const mediaBuffer = await wuzapiService.downloadMedia(messageId, mediaType);
                         
                         // Faz upload no Chatwoot
                         await chatwoot.uploadAttachment(
