@@ -8,7 +8,6 @@ class WuzAPIService {
         this.client = axios.create({
             baseURL: this.baseUrl,
             headers: {
-                'Authorization': `Bearer ${this.token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -16,23 +15,25 @@ class WuzAPIService {
 
     async sendMessage(phoneNumber, message) {
         try {
-            const response = await this.client.post('/send-message', {
-                phone: phoneNumber,
-                message: message
-            });
-            return response.data;
-        } catch (error) {
-            console.error('❌ Erro ao enviar mensagem pelo WuzAPI:', error.response?.data || error.message);
-            throw error;
-        }
-    }
+            // Limpa o número de telefone (remove tudo exceto dígitos)
+            let cleanNumber = phoneNumber.replace(/[^\d]/g, '');
+            
+            console.log(`📤 Enviando mensagem via WuzAPI para: ${cleanNumber}`);
+            console.log(`💬 Texto: ${message}`);
 
-    async getSessionStatus() {
-        try {
-            const response = await this.client.get('/status');
+            const response = await this.client.post('/chat/send/text', {
+                Phone: cleanNumber,
+                Body: message
+            }, {
+                params: {
+                    token: this.token
+                }
+            });
+
+            console.log('✅ Resposta do WuzAPI:', response.data);
             return response.data;
         } catch (error) {
-            console.error('❌ Erro ao verificar status da sessão:', error.response?.data || error.message);
+            console.error('❌ Erro ao enviar mensagem via WuzAPI:', error.response?.data || error.message);
             throw error;
         }
     }
