@@ -23,9 +23,6 @@ router.post('/:instanceName', async (req, res) => {
         const webhookData = req.body;
 
         console.log(`📨 Webhook recebido para instância: ${instanceName}`);
-        
-        // 🔍 LOG COMPLETO DO WEBHOOK
-        console.log('🔍 WEBHOOK COMPLETO:', JSON.stringify(webhookData, null, 2));
 
         const integration = await getIntegrationByInstance(instanceName);
         
@@ -183,9 +180,36 @@ router.post('/:instanceName', async (req, res) => {
                     try {
                         console.log(`📥 Processando mídia tipo: ${mediaType}`);
                         
-                        // Baixa mídia usando MessageID
-                        const wuzapiService = new WuzAPIService(integration);
-                        const mediaBuffer = await wuzapiService.downloadMedia(messageId, mediaType);
+                        // EXTRAI BASE64 DO WEBHOOK (mídia já vem no webhook!)
+                        let mediaBase64 = null;
+                        let mediaBuffer = null;
+                        
+                        if (mediaType === 'image' && message.imageMessage) {
+                            // Base64 pode estar em 'url' ou em campo específico
+                            mediaBase64 = message.imageMessage.url || 
+                                         message.imageMessage.jpegThumbnail;
+                        } else if (mediaType === 'video' && message.videoMessage) {
+                            mediaBase64 = message.videoMessage.url;
+                        } else if (mediaType === 'audio' && message.audioMessage) {
+                            mediaBase64 = message.audioMessage.url;
+                        } else if (mediaType === 'document' && message.documentMessage) {
+                            mediaBase64 = message.documentMessage.url;
+                        } else if (mediaType === 'sticker' && message.stickerMessage) {
+                            mediaBase64 = message.stickerMessage.url;
+                        }
+                        
+                        if (!mediaBase64) {
+                            throw new Error('URL da mídia não encontrada no webhook');
+                        }
+                        
+                        console.log(`✅ Base64 extraído (${Math.round(mediaBase64.length / 1024)}KB)`);
+                        
+                        // Converte base64 para Buffer
+                        // Remove prefixo "data:image/jpeg;base64," se existir
+                        const base64Data = mediaBase64.replace(/^data:.*?;base64,/, '');
+                        mediaBuffer = Buffer.from(base64Data, 'base64');
+                        
+                        console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
                         
                         // Faz upload no Chatwoot
                         await chatwoot.uploadAttachment(
