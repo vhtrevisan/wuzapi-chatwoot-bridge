@@ -14,7 +14,7 @@ setInterval(() => {
             chatwootMessageCache.delete(messageId);
         }
     }
-}, 60000); // Roda a cada 1 minuto
+}, 60000);
 
 router.post('/:instanceName', async (req, res) => {
     try {
@@ -23,7 +23,6 @@ router.post('/:instanceName', async (req, res) => {
 
         console.log(`📨 Webhook recebido para instância: ${instanceName}`);
 
-        // Busca configuração da instância
         const integration = await getIntegrationByInstance(instanceName);
         
         if (!integration || !integration.enabled) {
@@ -31,7 +30,6 @@ router.post('/:instanceName', async (req, res) => {
             return res.status(404).json({ error: 'Instância não configurada' });
         }
 
-        // Parse do jsonData
         let parsedData;
 
         if (typeof webhookData === 'object' && webhookData.type) {
@@ -57,6 +55,7 @@ router.post('/:instanceName', async (req, res) => {
             const info = parsedData.event?.Info;
             const message = parsedData.event?.Message;
             const isFromMe = info?.IsFromMe;
+            const isGroup = info?.IsGroup;
             const messageId = info?.ID;
 
             if (!info || !message) {
@@ -64,17 +63,20 @@ router.post('/:instanceName', async (req, res) => {
                 return res.status(400).json({ error: 'Dados incompletos' });
             }
 
-            // NOVA LÓGICA: Verifica se mensagem foi enviada pelo Chatwoot
-            if (isFromMe === true) {
-                // Verifica se está no cache (foi enviada pelo Chatwoot)
-                if (chatwootMessageCache.has(messageId)) {
-                    console.log('⏭️ Mensagem ignorada (enviada pelo Chatwoot)');
-                    return res.status(200).json({ success: true, message: 'Ignored Chatwoot outgoing message' });
-                }
-                
-                // Se não está no cache, é mensagem enviada pelo WhatsApp Web/Celular
-                console.log('✅ Mensagem enviada pelo WhatsApp Web/Celular - será processada');
+            // IGNORA GRUPOS
+            if (isGroup === true) {
+                console.log('⏭️ Mensagem de grupo ignorada');
+                return res.status(200).json({ success: true, message: 'Group message ignored' });
             }
+
+            // Verifica se mensagem já foi processada (evita duplicação)
+            if (chatwootMessageCache.has(messageId)) {
+                console.log('⏭️ Mensagem já processada (duplicada)');
+                return res.status(200).json({ success: true, message: 'Duplicate message ignored' });
+            }
+
+            // MARCA MENSAGEM COMO PROCESSADA IMEDIATAMENTE
+            chatwootMessageCache.set(messageId, Date.now());
 
             // Extrai número de telefone
             let phoneNumber = info.Sender || info.Chat || '';
@@ -119,12 +121,10 @@ router.post('/:instanceName', async (req, res) => {
             try {
                 const chatwoot = new ChatwootService(integration);
 
-                // Cria/busca contato
                 console.log('🔍 Buscando/criando contato...');
                 const contact = await chatwoot.getOrCreateContact(phoneNumber, senderName);
                 console.log('✅ Contato ID:', contact.id);
 
-                // Cria/busca conversa
                 console.log('🔍 Buscando/criando conversa...');
                 const conversation = await chatwoot.getOrCreateConversation(
                     integration.chatwoot_inbox_id,
@@ -132,11 +132,10 @@ router.post('/:instanceName', async (req, res) => {
                 );
                 console.log('✅ Conversa ID:', conversation.id);
 
-                // Define tipo de mensagem (incoming ou outgoing)
+                // Define tipo: incoming (recebida) ou outgoing (enviada por você no WhatsApp Web)
                 const messageType = isFromMe === true ? 'outgoing' : 'incoming';
                 console.log(`📝 Tipo de mensagem: ${messageType}`);
 
-                // Envia mensagem
                 console.log('📤 Enviando mensagem para Chatwoot...');
                 await chatwoot.sendMessage(conversation.id, {
                     content: messageText,
@@ -195,7 +194,7 @@ router.post('/:instanceName', async (req, res) => {
     }
 });
 
-// Exporta função para adicionar IDs ao cache (será chamada quando enviar pelo Chatwoot)
+// Exporta função para adicionar IDs ao cache
 router.addToChatwootCache = (messageId) => {
     chatwootMessageCache.set(messageId, Date.now());
 };
