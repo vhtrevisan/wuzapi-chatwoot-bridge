@@ -48,17 +48,21 @@ router.post('/events', async (req, res) => {
         }
 
         const messageContent = event.content || '';
+        const attachments = event.attachments || [];
 
-        if (!messageContent) {
-            console.log('⚠️ Mensagem sem conteúdo');
+        // Verifica se tem conteúdo OU anexos
+        if (!messageContent && attachments.length === 0) {
+            console.log('⚠️ Mensagem sem conteúdo e sem anexos');
             return res.status(400).json({ error: 'Mensagem sem conteúdo' });
         }
 
         console.log('📤 Enviando para WhatsApp:', phoneNumber);
+        console.log('📝 Texto:', messageContent || '(sem texto)');
+        console.log('📎 Anexos:', attachments.length);
 
         // Envia mensagem via WuzAPI
         const wuzapi = new WuzAPIService(integration);
-        await wuzapi.sendMessage(phoneNumber, messageContent);
+        await wuzapi.sendMessage(phoneNumber, messageContent, attachments);
 
         console.log('✅ Mensagem enviada com sucesso!');
 
