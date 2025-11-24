@@ -23,6 +23,9 @@ router.post('/:instanceName', async (req, res) => {
         const webhookData = req.body;
 
         console.log(`📨 Webhook recebido para instância: ${instanceName}`);
+        
+        // 🔍 LOG COMPLETO DO WEBHOOK
+        console.log('🔍 WEBHOOK COMPLETO:', JSON.stringify(webhookData, null, 2));
 
         const integration = await getIntegrationByInstance(instanceName);
         
