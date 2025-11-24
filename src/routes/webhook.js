@@ -156,6 +156,20 @@ router.post('/:instanceName', async (req, res) => {
             if (hasMedia) {
                 console.log('📎 Mídia detectada:', mediaType);
             }
+                        if (hasMedia) {
+                console.log('📎 Mídia detectada:', mediaType);
+                
+                // 🔍 LOG: Mostrar campos disponíveis
+                if (mediaType === 'image' && message.imageMessage) {
+                    console.log('🔍 Campos disponíveis em imageMessage:', Object.keys(message.imageMessage));
+                } else if (mediaType === 'document' && message.documentMessage) {
+                    console.log('🔍 Campos disponíveis em documentMessage:', Object.keys(message.documentMessage));
+                } else if (mediaType === 'audio' && message.audioMessage) {
+                    console.log('🔍 Campos disponíveis em audioMessage:', Object.keys(message.audioMessage));
+                } else if (mediaType === 'video' && message.videoMessage) {
+                    console.log('🔍 Campos disponíveis em videoMessage:', Object.keys(message.videoMessage));
+                }
+            }
 
             try {
                 const chatwoot = new ChatwootService(integration);
