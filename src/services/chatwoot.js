@@ -104,10 +104,13 @@ class ChatwootService {
                 contentType: mimeType
             });
 
-            // CRÍTICO: Usa legenda ou nome do arquivo
+            // CRÍTICO: Adiciona source_id para evitar loop
+            const sourceId = `wuzapi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
             form.append('content', caption || fileName);
             form.append('message_type', 'incoming');
             form.append('private', 'false');
+            form.append('source_id', sourceId);
 
             const response = await this.client.post(
                 `/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
@@ -124,6 +127,7 @@ class ChatwootService {
 
             console.log(`✅ Upload concluído!`);
             console.log(`✅ Message ID: ${response.data.id}`);
+            console.log(`✅ Source ID: ${sourceId}`);
             
             return response.data;
             
@@ -138,11 +142,15 @@ class ChatwootService {
 
     async sendMessage(conversationId, content, messageType = 'incoming') {
         try {
+            const sourceId = `wuzapi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
             await this.client.post(`/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`, {
                 content: content.content || content.text || content,
                 message_type: messageType,
-                source_id: `wuzapi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                source_id: sourceId
             });
+
+            console.log(`✅ Mensagem enviada com source_id: ${sourceId}`);
 
             return { success: true };
 
