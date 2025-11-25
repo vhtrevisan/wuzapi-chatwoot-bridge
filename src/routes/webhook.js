@@ -5,19 +5,45 @@ const { getIntegrationByInstance } = require('../database/sqlite');
 const ChatwootService = require('../services/chatwoot');
 const WuzAPIService = require('../services/wuzapi');
 
-// Cache de mensagens enviadas pelo Chatwoot (IDs das últimas mensagens enviadas)
+// ========================================
+// CONFIGURAÇÃO DO CACHE
+// ========================================
 const chatwootMessageCache = new Map();
+const MAX_CACHE_SIZE = 1000; // Limita cache a 1000 mensagens
 
-// Limpa cache a cada 5 minutos (mensagens antigas)
+// Limpa cache a cada 1 minuto
 setInterval(() => {
     const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+    let removedCount = 0;
+    
+    // Remove mensagens antigas (mais de 5 minutos)
     for (const [messageId, timestamp] of chatwootMessageCache.entries()) {
         if (timestamp < fiveMinutesAgo) {
             chatwootMessageCache.delete(messageId);
+            removedCount++;
         }
+    }
+    
+    // Se cache ainda está muito grande, remove as mais antigas
+    if (chatwootMessageCache.size > MAX_CACHE_SIZE) {
+        const entries = Array.from(chatwootMessageCache.entries());
+        entries.sort((a, b) => a[1] - b[1]); // Ordena por timestamp (mais antiga primeiro)
+        const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
+        
+        toRemove.forEach(([id]) => {
+            chatwootMessageCache.delete(id);
+            removedCount++;
+        });
+    }
+    
+    if (removedCount > 0) {
+        console.log(`🧹 Cache limpo: ${removedCount} mensagens antigas removidas (tamanho atual: ${chatwootMessageCache.size})`);
     }
 }, 60000);
 
+// ========================================
+// WEBHOOK PRINCIPAL
+// ========================================
 router.post('/:instanceName', async (req, res) => {
     try {
         const { instanceName } = req.params;
@@ -100,6 +126,18 @@ router.post('/:instanceName', async (req, res) => {
                 return res.status(400).json({ error: 'Número de telefone não encontrado' });
             }
 
+            // VALIDAÇÃO DE TELEFONE
+            const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
+            if (cleanPhone.length < 10) {
+                console.log(`⚠️ Telefone inválido (muito curto): ${phoneNumber}`);
+                return res.status(400).json({ error: 'Número de telefone inválido' });
+            }
+            
+            if (cleanPhone.length > 15) {
+                console.log(`⚠️ Telefone suspeito (muito longo): ${phoneNumber} - ${cleanPhone.length} dígitos`);
+                // Continua processamento mas registra aviso
+            }
+
             console.log('📞 Telefone:', phoneNumber);
             console.log('👤 Nome:', senderName);
 
@@ -116,6 +154,15 @@ router.post('/:instanceName', async (req, res) => {
                 caption = message.videoMessage.caption;
             } else if (message.documentMessage?.caption) {
                 caption = message.documentMessage.caption;
+            }
+
+            // ========================================
+            // IGNORA MENSAGENS OUTGOING VAZIAS
+            // (Mensagens editadas/deletadas do próprio número)
+            // ========================================
+            if (isFromMe === true && !messageText && !caption && !s3Data) {
+                console.log('⏭️ Mensagem outgoing vazia ignorada (editada/deletada)');
+                return res.status(200).json({ success: true, message: 'Empty outgoing message ignored' });
             }
 
             try {
@@ -149,7 +196,7 @@ router.post('/:instanceName', async (req, res) => {
                         console.log('⬇️ Baixando mídia do MinIO...');
                         const response = await axios.get(s3Data.url, {
                             responseType: 'arraybuffer',
-                            timeout: 30000
+                            timeout: 30000 // TIMEOUT DE 30 SEGUNDOS
                         });
 
                         const mediaBuffer = Buffer.from(response.data);
