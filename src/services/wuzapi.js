@@ -9,7 +9,8 @@ class WuzAPIService {
             baseURL: this.baseUrl,
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 30000 // TIMEOUT DE 30 SEGUNDOS
         });
     }
 
@@ -27,6 +28,13 @@ class WuzAPIService {
                 console.log('⚠️ Não foi possível adicionar ao cache:', err.message);
             }
         }
+    }
+
+    /**
+     * Aguarda um delay (para retry com backoff)
+     */
+    async sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**
@@ -54,56 +62,9 @@ class WuzAPIService {
     }
 
     /**
-     * Baixa mídia usando endpoints específicos do WuzAPI
+     * Envia mensagem de texto com RETRY AUTOMÁTICO
      */
-    async downloadMedia(messageId, mediaType) {
-        try {
-            console.log(`📥 Baixando ${mediaType} com MessageID: ${messageId}`);
-            
-            // Define endpoint baseado no tipo de mídia
-            let endpoint;
-            switch(mediaType) {
-                case 'image':
-                    endpoint = '/chat/downloadimage';
-                    break;
-                case 'video':
-                    endpoint = '/chat/downloadvideo';
-                    break;
-                case 'document':
-                    endpoint = '/chat/downloaddocument';
-                    break;
-                case 'audio':
-                    // Áudio geralmente vem como documento no WuzAPI
-                    endpoint = '/chat/downloaddocument';
-                    break;
-                case 'sticker':
-                    endpoint = '/chat/downloadimage';
-                    break;
-                default:
-                    throw new Error(`Tipo de mídia não suportado: ${mediaType}`);
-            }
-            
-            console.log(`🔗 Usando endpoint: ${endpoint}`);
-            console.log(`📤 Payload: { MessageID: "${messageId}" }`);
-            
-            const response = await this.client.post(endpoint, {
-                MessageID: messageId
-            }, {
-                params: { token: this.token },
-                responseType: 'arraybuffer'
-            });
-
-            console.log(`✅ Mídia baixada com sucesso (${response.data.length} bytes)`);
-            return response.data;
-        } catch (error) {
-            console.error('❌ Erro ao baixar mídia:', error.message);
-            console.error('❌ Status:', error.response?.status);
-            console.error('❌ Response:', error.response?.data?.toString() || 'Sem dados');
-            throw error;
-        }
-    }
-
-    async sendTextMessage(phoneNumber, message) {
+    async sendTextMessage(phoneNumber, message, retryCount = 0) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
@@ -124,13 +85,25 @@ class WuzAPIService {
             this.addMessageToCache(messageId);
             
             return response.data;
+            
         } catch (error) {
+            // RETRY AUTOMÁTICO PARA ERRO 500 (transação SQL do WuzAPI)
+            if (error.response?.status === 500 && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+                console.log(`⚠️ Erro 500 detectado - Aguardando ${delay}ms antes de tentar novamente (tentativa ${retryCount + 1}/3)`);
+                await this.sleep(delay);
+                return this.sendTextMessage(phoneNumber, message, retryCount + 1);
+            }
+            
             console.error('❌ Erro ao enviar texto:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async sendImageMessage(phoneNumber, imageData, caption = '') {
+    /**
+     * Envia imagem com RETRY AUTOMÁTICO
+     */
+    async sendImageMessage(phoneNumber, imageData, caption = '', retryCount = 0) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
@@ -152,13 +125,25 @@ class WuzAPIService {
             this.addMessageToCache(messageId);
             
             return response.data;
+            
         } catch (error) {
+            // RETRY AUTOMÁTICO PARA ERRO 500
+            if (error.response?.status === 500 && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000;
+                console.log(`⚠️ Erro 500 detectado - Aguardando ${delay}ms antes de tentar novamente (tentativa ${retryCount + 1}/3)`);
+                await this.sleep(delay);
+                return this.sendImageMessage(phoneNumber, imageData, caption, retryCount + 1);
+            }
+            
             console.error('❌ Erro ao enviar imagem:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async sendVideoMessage(phoneNumber, videoData, caption = '') {
+    /**
+     * Envia vídeo com RETRY AUTOMÁTICO
+     */
+    async sendVideoMessage(phoneNumber, videoData, caption = '', retryCount = 0) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
@@ -180,13 +165,25 @@ class WuzAPIService {
             this.addMessageToCache(messageId);
             
             return response.data;
+            
         } catch (error) {
+            // RETRY AUTOMÁTICO PARA ERRO 500
+            if (error.response?.status === 500 && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000;
+                console.log(`⚠️ Erro 500 detectado - Aguardando ${delay}ms antes de tentar novamente (tentativa ${retryCount + 1}/3)`);
+                await this.sleep(delay);
+                return this.sendVideoMessage(phoneNumber, videoData, caption, retryCount + 1);
+            }
+            
             console.error('❌ Erro ao enviar vídeo:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async sendAudioMessage(phoneNumber, audioData) {
+    /**
+     * Envia áudio com RETRY AUTOMÁTICO
+     */
+    async sendAudioMessage(phoneNumber, audioData, retryCount = 0) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
@@ -206,13 +203,25 @@ class WuzAPIService {
             this.addMessageToCache(messageId);
             
             return response.data;
+            
         } catch (error) {
+            // RETRY AUTOMÁTICO PARA ERRO 500
+            if (error.response?.status === 500 && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000;
+                console.log(`⚠️ Erro 500 detectado - Aguardando ${delay}ms antes de tentar novamente (tentativa ${retryCount + 1}/3)`);
+                await this.sleep(delay);
+                return this.sendAudioMessage(phoneNumber, audioData, retryCount + 1);
+            }
+            
             console.error('❌ Erro ao enviar áudio:', error.response?.data || error.message);
             throw error;
         }
     }
 
-    async sendDocumentMessage(phoneNumber, documentData, fileName = 'document') {
+    /**
+     * Envia documento com RETRY AUTOMÁTICO
+     */
+    async sendDocumentMessage(phoneNumber, documentData, fileName = 'document', retryCount = 0) {
         try {
             const cleanNumber = phoneNumber.replace(/[^\d]/g, '');
             
@@ -234,7 +243,16 @@ class WuzAPIService {
             this.addMessageToCache(messageId);
             
             return response.data;
+            
         } catch (error) {
+            // RETRY AUTOMÁTICO PARA ERRO 500
+            if (error.response?.status === 500 && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000;
+                console.log(`⚠️ Erro 500 detectado - Aguardando ${delay}ms antes de tentar novamente (tentativa ${retryCount + 1}/3)`);
+                await this.sleep(delay);
+                return this.sendDocumentMessage(phoneNumber, documentData, fileName, retryCount + 1);
+            }
+            
             console.error('❌ Erro ao enviar documento:', error.response?.data || error.message);
             throw error;
         }
