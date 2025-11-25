@@ -145,18 +145,11 @@ router.post('/:instanceName', async (req, res) => {
                     console.log('📦 Tamanho:', Math.round(s3Data.size / 1024), 'KB');
 
                     try {
-                        // Baixa mídia do MinIO COM AUTENTICAÇÃO
-                        console.log('⬇️ Baixando mídia do MinIO (com autenticação)...');
+                        // Baixa mídia do MinIO (bucket público)
+                        console.log('⬇️ Baixando mídia do MinIO...');
                         const response = await axios.get(s3Data.url, {
                             responseType: 'arraybuffer',
-                            timeout: 30000,
-                            auth: {
-                                username: 'admin',
-                                password: 'sM@rt814223cd'
-                            },
-                            headers: {
-                                'User-Agent': 'wuzapi-chatwoot-bridge/1.0'
-                            }
+                            timeout: 30000
                         });
 
                         const mediaBuffer = Buffer.from(response.data);
@@ -189,7 +182,7 @@ router.post('/:instanceName', async (req, res) => {
                     } catch (mediaError) {
                         console.error('❌ Erro ao processar mídia:', mediaError.message);
                         console.error('❌ Status:', mediaError.response?.status);
-                        console.error('❌ Headers da resposta:', mediaError.response?.headers);
+                        console.error('❌ URL que falhou:', s3Data.url);
                         
                         // Se falhar, envia pelo menos o texto
                         const fallbackText = caption || messageText || '📎 [Falha ao carregar mídia]';
