@@ -50,11 +50,31 @@ router.post('/events', async (req, res) => {
         console.log('✅ Integração encontrada:', integration.instance_name);
 
         // Extrai número de telefone do contato
-        const phoneNumber = event.conversation?.meta?.sender?.phone_number;
+        let phoneNumber = event.conversation?.meta?.sender?.phone_number;
 
         if (!phoneNumber) {
             console.log('⚠️ Número de telefone não encontrado no evento');
+            console.log('📋 Event data:', JSON.stringify(event.conversation?.meta, null, 2));
             return res.status(400).json({ error: 'Número de telefone não encontrado' });
+        }
+
+        // REMOVE + DO INÍCIO SE EXISTIR (Chatwoot envia com +)
+        phoneNumber = phoneNumber.replace(/^\+/, '');
+
+        // VALIDAÇÃO ROBUSTA DE TELEFONE
+        const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
+        
+        if (cleanPhone.length < 10) {
+            console.log(`⚠️ Telefone inválido (muito curto): ${phoneNumber} (${cleanPhone.length} dígitos)`);
+            return res.status(400).json({ 
+                error: 'Número de telefone inválido',
+                details: `Telefone muito curto: ${cleanPhone.length} dígitos`
+            });
+        }
+        
+        if (cleanPhone.length > 15) {
+            console.log(`⚠️ Telefone suspeito (muito longo): ${phoneNumber} (${cleanPhone.length} dígitos)`);
+            // Não bloqueia, mas registra aviso
         }
 
         const messageContent = event.content || '';
@@ -101,24 +121,43 @@ router.post('/events', async (req, res) => {
             console.log('📋 Detalhes dos anexos:', attachments.map(a => ({
                 name: a.file_name,
                 type: a.file_type,
-                url: a.data_url
+                url: a.data_url?.substring(0, 100) + '...' // Trunca URL longa
             })));
         }
 
         // Envia mensagem via WuzAPI
         const wuzapi = new WuzAPIService(integration);
-        await wuzapi.sendMessage(phoneNumber, messageContent, attachments);
+        
+        try {
+            await wuzapi.sendMessage(phoneNumber, messageContent, attachments);
+            console.log('✅ Mensagem enviada com sucesso para WhatsApp!');
+        } catch (wuzapiError) {
+            console.error('❌ Erro do WuzAPI:', wuzapiError.message);
+            console.error('❌ Status:', wuzapiError.response?.status);
+            console.error('❌ Response:', wuzapiError.response?.data);
+            
+            // Retorna erro específico para o Chatwoot
+            return res.status(500).json({ 
+                error: 'Falha ao enviar mensagem via WuzAPI',
+                details: wuzapiError.response?.data || wuzapiError.message,
+                phone: phoneNumber
+            });
+        }
 
-        console.log('✅ Mensagem enviada com sucesso para WhatsApp!');
-
-        return res.status(200).json({ success: true });
+        return res.status(200).json({ 
+            success: true,
+            phone: phoneNumber,
+            attachments_count: attachments.length
+        });
 
     } catch (error) {
         console.error('❌ Erro ao processar evento do Chatwoot:', error.message);
         console.error('Stack:', error.stack);
+        
         res.status(500).json({ 
             error: error.message,
-            details: error.response?.data || 'Sem detalhes adicionais'
+            details: error.response?.data || 'Sem detalhes adicionais',
+            timestamp: new Date().toISOString()
         });
     }
 });
