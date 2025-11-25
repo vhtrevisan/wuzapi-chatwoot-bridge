@@ -8,6 +8,10 @@ router.post('/events', async (req, res) => {
         const event = req.body;
 
         console.log('📨 Evento recebido do Chatwoot:', event.event);
+        console.log('📋 Message Type:', event.message_type);
+        console.log('📋 Source ID:', event.source_id || 'null');
+        console.log('📋 Private:', event.private);
+        console.log('📋 Content:', event.content?.substring(0, 50) || 'empty');
 
         // Processa apenas mensagens enviadas por agentes (outgoing)
         if (event.event !== 'message_created') {
@@ -105,12 +109,13 @@ router.post('/events', async (req, res) => {
         const wuzapi = new WuzAPIService(integration);
         await wuzapi.sendMessage(phoneNumber, messageContent, attachments);
 
-        console.log('✅ Mensagem enviada com sucesso!');
+        console.log('✅ Mensagem enviada com sucesso para WhatsApp!');
 
         return res.status(200).json({ success: true });
 
     } catch (error) {
         console.error('❌ Erro ao processar evento do Chatwoot:', error.message);
+        console.error('Stack:', error.stack);
         res.status(500).json({ 
             error: error.message,
             details: error.response?.data || 'Sem detalhes adicionais'
