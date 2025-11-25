@@ -11,15 +11,46 @@ class ChatwootService {
             headers: {
                 'api_access_token': this.apiToken,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 30000 // TIMEOUT DE 30 SEGUNDOS
         });
+    }
+
+    /**
+     * Valida e formata número de telefone
+     */
+    validateAndFormatPhone(phoneNumber) {
+        // Remove caracteres especiais do telefone
+        let cleanPhone = phoneNumber.replace(/[^\d]/g, '');
+        
+        // VALIDAÇÃO: Telefone deve ter pelo menos 10 dígitos
+        if (cleanPhone.length < 10) {
+            console.warn(`⚠️ Telefone inválido (muito curto): ${cleanPhone}`);
+            throw new Error(`Número de telefone inválido: ${phoneNumber}`);
+        }
+        
+        // VALIDAÇÃO: Telefones muito longos (acima de 15 dígitos) são suspeitos
+        if (cleanPhone.length > 15) {
+            console.warn(`⚠️ Telefone suspeito (muito longo): ${cleanPhone} (${cleanPhone.length} dígitos)`);
+            
+            // Se for muito longo, tenta usar os últimos 13 dígitos (padrão BR: +55 + 11 dígitos)
+            if (cleanPhone.length > 15) {
+                const truncatedPhone = cleanPhone.slice(-13);
+                console.log(`🔧 Truncando para os últimos 13 dígitos: ${truncatedPhone}`);
+                cleanPhone = truncatedPhone;
+            }
+        }
+        
+        const formattedPhone = `+${cleanPhone}`;
+        console.log(`✅ Telefone formatado: ${formattedPhone}`);
+        
+        return { cleanPhone, formattedPhone };
     }
 
     async getOrCreateContact(phoneNumber, name = '') {
         try {
-            // Remove caracteres especiais do telefone
-            const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
-            const formattedPhone = `+${cleanPhone}`;
+            // Valida e formata telefone
+            const { cleanPhone, formattedPhone } = this.validateAndFormatPhone(phoneNumber);
 
             // Busca contato existente
             const searchResponse = await this.client.get(`/api/v1/accounts/${this.accountId}/contacts/search`, {
@@ -121,7 +152,8 @@ class ChatwootService {
                         'api_access_token': this.apiToken
                     },
                     maxContentLength: Infinity,
-                    maxBodyLength: Infinity
+                    maxBodyLength: Infinity,
+                    timeout: 60000 // 60 SEGUNDOS PARA UPLOAD DE MÍDIA GRANDE
                 }
             );
 
@@ -157,6 +189,47 @@ class ChatwootService {
         } catch (error) {
             console.error('❌ Erro ao enviar mensagem:', error.response?.data || error.message);
             throw error;
+        }
+    }
+
+    /**
+     * Cria inbox no Chatwoot (usado pelo admin)
+     */
+    async createInbox(name, identifier) {
+        try {
+            const response = await this.client.post(`/api/v1/accounts/${this.accountId}/inboxes`, {
+                name: name,
+                channel: {
+                    type: 'api',
+                    webhook_url: ''
+                }
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error('❌ Erro ao criar inbox:', error.response?.data || error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Envia mensagem de boas-vindas no inbox (usado pelo admin)
+     */
+    async sendWelcomeMessage(inboxId, instanceName, webhookUrl) {
+        try {
+            // Cria conversa temporária para enviar mensagem de boas-vindas
+            const welcomeMessage = `🎉 Inbox "${instanceName}" criado com sucesso!\n\n` +
+                                  `📋 Configure o webhook no WuzAPI:\n${webhookUrl}\n\n` +
+                                  `✅ Sistema pronto para uso!`;
+
+            console.log('💬 Mensagem de boas-vindas preparada');
+            
+            // Apenas loga, não envia (pode ser implementado depois se necessário)
+            return { success: true };
+        } catch (error) {
+            console.error('❌ Erro ao enviar mensagem de boas-vindas:', error.message);
+            // Não falha a criação do inbox se a mensagem de boas-vindas falhar
+            return { success: false };
         }
     }
 }
