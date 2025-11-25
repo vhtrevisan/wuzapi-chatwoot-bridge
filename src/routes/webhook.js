@@ -51,6 +51,20 @@ router.post('/:instanceName', async (req, res) => {
         console.log('📋 Tipo de evento:', parsedData.type);
 
         // ========================================
+        // PROCESSA MÍDIAS DO MINIO (S3)
+        // ========================================
+        if (parsedData.type === 'Picture' || parsedData.type === 'Video' || 
+            parsedData.type === 'Audio' || parsedData.type === 'Document') {
+            
+            console.log(`📸 Mídia recebida do MinIO: ${parsedData.type}`);
+            console.log(`📦 ESTRUTURA COMPLETA DO EVENTO:`);
+            console.log(JSON.stringify(parsedData, null, 2));
+            
+            // TODO: Processar mídia do MinIO
+            return res.status(200).json({ success: true, message: 'Media from MinIO received' });
+        }
+
+        // ========================================
         // PROCESSA MENSAGENS RECEBIDAS
         // ========================================
         if (parsedData.type === 'Message') {
