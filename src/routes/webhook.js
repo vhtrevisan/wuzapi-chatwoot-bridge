@@ -51,21 +51,7 @@ router.post('/:instanceName', async (req, res) => {
         console.log('📋 Tipo de evento:', parsedData.type);
 
         // ========================================
-        // PROCESSA MÍDIAS DO MINIO (S3)
-        // ========================================
-        if (parsedData.type === 'Picture' || parsedData.type === 'Video' || 
-            parsedData.type === 'Audio' || parsedData.type === 'Document') {
-            
-            console.log(`📸 Mídia recebida do MinIO: ${parsedData.type}`);
-            console.log(`📦 ESTRUTURA COMPLETA DO EVENTO:`);
-            console.log(JSON.stringify(parsedData, null, 2));
-            
-            // TODO: Processar mídia do MinIO
-            return res.status(200).json({ success: true, message: 'Media from MinIO received' });
-        }
-
-        // ========================================
-        // PROCESSA MENSAGENS RECEBIDAS
+        // PROCESSA MENSAGENS RECEBIDAS (APENAS TEXTO)
         // ========================================
         if (parsedData.type === 'Message') {
             const info = parsedData.event?.Info;
@@ -97,10 +83,8 @@ router.post('/:instanceName', async (req, res) => {
             // Extrai número de telefone CORRETO
             let phoneNumber;
             if (isFromMe === true) {
-                // Se mensagem foi enviada por você (WhatsApp Web), pega o DESTINATÁRIO (Chat)
                 phoneNumber = info.Chat || '';
             } else {
-                // Se mensagem foi recebida, pega o REMETENTE (Sender)
                 phoneNumber = info.Sender || info.Chat || '';
             }
 
@@ -111,7 +95,6 @@ router.post('/:instanceName', async (req, res) => {
 
             const senderName = info.PushName || phoneNumber;
 
-            // VALIDA: Ignora se número estiver vazio
             if (!phoneNumber) {
                 console.log('⚠️ Número de telefone não encontrado');
                 return res.status(400).json({ error: 'Número de telefone não encontrado' });
@@ -122,45 +105,17 @@ router.post('/:instanceName', async (req, res) => {
                              message.extendedTextMessage?.text ||
                              '';
 
-            // Detecta e processa mídia
-            let hasMedia = false;
-            let mediaType = null;
-            let mediaFileName = null;
-            let mediaMimeType = null;
-            let mediaCaption = '';
-
+            // Detecta mídia mas IGNORA processamento
             if (message.imageMessage) {
-                hasMedia = true;
-                mediaType = 'image';
-                mediaFileName = 'image.jpg';
-                mediaMimeType = message.imageMessage.mimetype || 'image/jpeg';
-                mediaCaption = message.imageMessage.caption || '';
-                messageText = mediaCaption || '📷 Imagem';
+                messageText = message.imageMessage.caption || '📷 Imagem (mídia temporariamente desabilitada)';
             } else if (message.videoMessage) {
-                hasMedia = true;
-                mediaType = 'video';
-                mediaFileName = 'video.mp4';
-                mediaMimeType = message.videoMessage.mimetype || 'video/mp4';
-                mediaCaption = message.videoMessage.caption || '';
-                messageText = mediaCaption || '🎥 Vídeo';
+                messageText = message.videoMessage.caption || '🎥 Vídeo (mídia temporariamente desabilitada)';
             } else if (message.audioMessage) {
-                hasMedia = true;
-                mediaType = 'audio';
-                mediaFileName = 'audio.ogg';
-                mediaMimeType = message.audioMessage.mimetype || 'audio/ogg';
-                messageText = '🎵 Áudio';
+                messageText = '🎵 Áudio (mídia temporariamente desabilitada)';
             } else if (message.documentMessage) {
-                hasMedia = true;
-                mediaType = 'document';
-                mediaFileName = message.documentMessage.fileName || 'document.pdf';
-                mediaMimeType = message.documentMessage.mimetype || 'application/pdf';
-                messageText = `📄 ${mediaFileName}`;
+                messageText = `📄 Documento (mídia temporariamente desabilitada)`;
             } else if (message.stickerMessage) {
-                hasMedia = true;
-                mediaType = 'sticker';
-                mediaFileName = 'sticker.webp';
-                mediaMimeType = 'image/webp';
-                messageText = '🎨 Sticker';
+                messageText = '🎨 Sticker (mídia temporariamente desabilitada)';
             } else if (!messageText) {
                 messageText = '[Mensagem sem conteúdo de texto]';
             }
@@ -168,9 +123,6 @@ router.post('/:instanceName', async (req, res) => {
             console.log('📞 Telefone:', phoneNumber);
             console.log('👤 Nome:', senderName);
             console.log('💬 Mensagem:', messageText);
-            if (hasMedia) {
-                console.log('📎 Mídia detectada:', mediaType);
-            }
 
             try {
                 const chatwoot = new ChatwootService(integration);
@@ -186,146 +138,10 @@ router.post('/:instanceName', async (req, res) => {
                 );
                 console.log('✅ Conversa ID:', conversation.id);
 
-                // Define tipo: incoming (recebida) ou outgoing (enviada por você no WhatsApp Web)
                 const messageType = isFromMe === true ? 'outgoing' : 'incoming';
                 console.log(`📝 Tipo de mensagem: ${messageType}`);
 
-                // PROCESSA MÍDIA SE EXISTIR
-                if (hasMedia) {
-                    try {
-                        console.log(`📥 Processando mídia tipo: ${mediaType}`);
-                        
-                        // EXTRAI TODOS OS PARÂMETROS DA MÍDIA
-                        let mediaBuffer = null;
-                        let mediaData = null;
-
-                        if (mediaType === 'image' && message.imageMessage) {
-                            mediaData = message.imageMessage;
-                        } else if (mediaType === 'video' && message.videoMessage) {
-                            mediaData = message.videoMessage;
-                        } else if (mediaType === 'audio' && message.audioMessage) {
-                            mediaData = message.audioMessage;
-                        } else if (mediaType === 'document' && message.documentMessage) {
-                            mediaData = message.documentMessage;
-                        } else if (mediaType === 'sticker' && message.stickerMessage) {
-                            mediaData = message.stickerMessage;
-                        }
-
-                        if (!mediaData) {
-                            throw new Error('Dados da mídia não encontrados no webhook');
-                        }
-
-                        console.log(`🔍 Preparando download via WuzAPI`);
-
-                        // Monta payload com TODOS os parâmetros necessários para descriptografia
-                        const downloadPayload = {
-                            Url: mediaData.URL || mediaData.url,
-                            DirectPath: mediaData.directPath,
-                            MediaKey: mediaData.mediaKey,
-                            Mimetype: mediaData.mimetype,
-                            FileEncSHA256: mediaData.fileEncSha256,
-                            FileSHA256: mediaData.fileSha256,
-                            FileLength: mediaData.fileLength || 0
-                        };
-
-                        console.log(`🔐 Parâmetros de descriptografia extraídos`);
-
-                        // Define endpoint correto baseado no tipo
-                        let downloadEndpoint = '';
-                        if (mediaType === 'image') {
-                            downloadEndpoint = '/chat/downloadimage';
-                        } else if (mediaType === 'video') {
-                            downloadEndpoint = '/chat/downloadvideo';
-                        } else if (mediaType === 'audio') {
-                            downloadEndpoint = '/chat/downloadaudio';
-                        } else if (mediaType === 'document') {
-                            downloadEndpoint = '/chat/downloaddocument';
-                        } else if (mediaType === 'sticker') {
-                            downloadEndpoint = '/chat/downloadimage'; // Sticker usa endpoint de imagem
-                        }
-
-                        console.log(`⬇️ Baixando mídia via: ${integration.wuzapi_url}${downloadEndpoint}`);
-                        console.log(`📦 Payload sendo enviado:`, JSON.stringify(downloadPayload, null, 2));
-
-                        try {
-                            // Faz request para WuzAPI descriptografar
-                            const wuzapiResponse = await axios.post(
-                                `${integration.wuzapi_url}${downloadEndpoint}?token=${integration.wuzapi_token}`,
-                                downloadPayload,
-                                {
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    timeout: 60000
-                                }
-                            );
-
-                            console.log(`✅ Resposta WuzAPI status: ${wuzapiResponse.status}`);
-                            console.log(`📦 Dados retornados:`, JSON.stringify({
-                                mimetype: wuzapiResponse.data?.mimetype,
-                                dataLength: wuzapiResponse.data?.data?.length || 0
-                            }, null, 2));
-
-                            if (!wuzapiResponse.data || !wuzapiResponse.data.mimetype || !wuzapiResponse.data.data) {
-                                throw new Error('WuzAPI não retornou dados válidos');
-                            }
-
-                            console.log(`✅ Mídia descriptografada pelo WuzAPI (${wuzapiResponse.data.mimetype})`);
-
-                            // Converte base64 para buffer
-                            const base64Data = wuzapiResponse.data.data.replace(/^data:.*?;base64,/, '');
-                            mediaBuffer = Buffer.from(base64Data, 'base64');
-
-                            console.log(`✅ Buffer criado (${Math.round(mediaBuffer.length / 1024)}KB)`);
-
-                            if (!mediaBuffer || mediaBuffer.length === 0) {
-                                throw new Error('Buffer de mídia vazio após descriptografia');
-                            }
-
-                        } catch (wuzapiError) {
-                            console.error('❌ ERRO DETALHADO DO WUZAPI:');
-                            console.error('❌ Status:', wuzapiError.response?.status);
-                            console.error('❌ Status Text:', wuzapiError.response?.statusText);
-                            console.error('❌ Data:', JSON.stringify(wuzapiError.response?.data, null, 2));
-                            console.error('❌ Headers:', JSON.stringify(wuzapiError.response?.headers, null, 2));
-                            throw wuzapiError;
-                        }
-                        
-                        console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
-                        
-                        // Faz upload no Chatwoot COM LEGENDA
-                        await chatwoot.uploadAttachment(
-                            conversation.id,
-                            mediaBuffer,
-                            mediaFileName,
-                            mediaMimeType,
-                            mediaCaption || `📎 ${mediaFileName}`
-                        );
-                        
-                        console.log('✅ Mídia enviada para Chatwoot');
-                        
-                        // Se tem legenda, envia como mensagem separada
-                        if (mediaCaption) {
-                            await chatwoot.sendMessage(conversation.id, {
-                                content: mediaCaption,
-                                text: mediaCaption
-                            }, messageType);
-                        }
-                        
-                        return res.status(200).json({ 
-                            success: true,
-                            conversation_id: conversation.id,
-                            contact_id: contact.id
-                        });
-                        
-                    } catch (mediaError) {
-                        console.error('⚠️ Erro ao processar mídia:', mediaError.message);
-                        console.error('⚠️ Stack:', mediaError.stack);
-                        // Continua e envia mensagem de texto como fallback
-                    }
-                }
-
-                // Envia mensagem de texto (se não tiver mídia ou se mídia falhou)
+                // Envia apenas mensagem de texto
                 console.log('📤 Enviando mensagem para Chatwoot...');
                 await chatwoot.sendMessage(conversation.id, {
                     content: messageText,
