@@ -9,14 +9,13 @@ const WuzAPIService = require('../services/wuzapi');
 // CONFIGURAÇÃO DO CACHE
 // ========================================
 const chatwootMessageCache = new Map();
-const MAX_CACHE_SIZE = 1000; // Limita cache a 1000 mensagens
+const MAX_CACHE_SIZE = 1000;
 
 // Limpa cache a cada 1 minuto
 setInterval(() => {
     const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
     let removedCount = 0;
     
-    // Remove mensagens antigas (mais de 5 minutos)
     for (const [messageId, timestamp] of chatwootMessageCache.entries()) {
         if (timestamp < fiveMinutesAgo) {
             chatwootMessageCache.delete(messageId);
@@ -24,10 +23,9 @@ setInterval(() => {
         }
     }
     
-    // Se cache ainda está muito grande, remove as mais antigas
     if (chatwootMessageCache.size > MAX_CACHE_SIZE) {
         const entries = Array.from(chatwootMessageCache.entries());
-        entries.sort((a, b) => a[1] - b[1]); // Ordena por timestamp (mais antiga primeiro)
+        entries.sort((a, b) => a[1] - b[1]);
         const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
         
         toRemove.forEach(([id]) => {
@@ -135,7 +133,6 @@ router.post('/:instanceName', async (req, res) => {
             
             if (cleanPhone.length > 15) {
                 console.log(`⚠️ Telefone suspeito (muito longo): ${phoneNumber} - ${cleanPhone.length} dígitos`);
-                // Continua processamento mas registra aviso
             }
 
             console.log('📞 Telefone:', phoneNumber);
@@ -158,7 +155,6 @@ router.post('/:instanceName', async (req, res) => {
 
             // ========================================
             // IGNORA MENSAGENS OUTGOING VAZIAS
-            // (Mensagens editadas/deletadas do próprio número)
             // ========================================
             if (isFromMe === true && !messageText && !caption && !s3Data) {
                 console.log('⏭️ Mensagem outgoing vazia ignorada (editada/deletada)');
@@ -179,11 +175,12 @@ router.post('/:instanceName', async (req, res) => {
                 );
                 console.log('✅ Conversa ID:', conversation.id);
 
+                // CRÍTICO: Define messageType correto
                 const messageType = isFromMe === true ? 'outgoing' : 'incoming';
                 console.log(`📝 Tipo de mensagem: ${messageType}`);
 
                 // ========================================
-                // SE TEM MÍDIA DO MINIO (s3 presente)
+                // SE TEM MÍDIA DO MINIO
                 // ========================================
                 if (s3Data && s3Data.url) {
                     console.log('📸 Mídia detectada do MinIO!');
@@ -192,17 +189,16 @@ router.post('/:instanceName', async (req, res) => {
                     console.log('📦 Tamanho:', Math.round(s3Data.size / 1024), 'KB');
 
                     try {
-                        // Baixa mídia do MinIO (bucket público)
                         console.log('⬇️ Baixando mídia do MinIO...');
                         const response = await axios.get(s3Data.url, {
                             responseType: 'arraybuffer',
-                            timeout: 30000 // TIMEOUT DE 30 SEGUNDOS
+                            timeout: 30000
                         });
 
                         const mediaBuffer = Buffer.from(response.data);
                         console.log(`✅ Mídia baixada (${Math.round(mediaBuffer.length / 1024)}KB)`);
 
-                        // Gera nome amigável baseado no tipo MIME
+                        // Gera nome amigável
                         let mediaMimeType = s3Data.mimeType || 'application/octet-stream';
                         let mediaFileName = 'arquivo';
 
@@ -220,25 +216,24 @@ router.post('/:instanceName', async (req, res) => {
                         } else if (mediaMimeType.includes('sheet') || mediaMimeType.includes('excel')) {
                             mediaFileName = 'planilha.xlsx';
                         } else if (s3Data.fileName) {
-                            // Mantém nome original para tipos desconhecidos
                             mediaFileName = s3Data.fileName;
                         }
 
                         console.log('📝 Nome do arquivo:', mediaFileName);
 
-                        // Upload para Chatwoot
+                        // Upload para Chatwoot COM messageType correto
                         console.log(`📤 Fazendo upload para Chatwoot...`);
                         await chatwoot.uploadAttachment(
                             conversation.id,
                             mediaBuffer,
                             mediaFileName,
                             mediaMimeType,
-                            caption || messageText || `📎 ${mediaFileName}`
+                            caption || messageText || `📎 ${mediaFileName}`,
+                            messageType // PASSA O messageType CORRETO!
                         );
 
                         console.log('✅ Mídia enviada para Chatwoot');
 
-                        // Se tem legenda ou texto adicional, envia separado
                         if (caption && caption !== messageText) {
                             await chatwoot.sendMessage(conversation.id, {
                                 content: caption,
@@ -251,7 +246,6 @@ router.post('/:instanceName', async (req, res) => {
                         console.error('❌ Status:', mediaError.response?.status);
                         console.error('❌ URL que falhou:', s3Data.url);
                         
-                        // Se falhar, envia pelo menos o texto
                         const fallbackText = caption || messageText || '📎 [Falha ao carregar mídia]';
                         await chatwoot.sendMessage(conversation.id, {
                             content: fallbackText,
@@ -261,10 +255,9 @@ router.post('/:instanceName', async (req, res) => {
 
                 } 
                 // ========================================
-                // SE É APENAS TEXTO (sem mídia)
+                // SE É APENAS TEXTO
                 // ========================================
                 else {
-                    // Detecta tipo de mídia mas sem S3 (fallback)
                     if (message.imageMessage) {
                         messageText = message.imageMessage.caption || '📷 Imagem';
                     } else if (message.videoMessage) {
@@ -281,7 +274,6 @@ router.post('/:instanceName', async (req, res) => {
 
                     console.log('💬 Mensagem:', messageText);
 
-                    // Envia texto
                     console.log('📤 Enviando mensagem para Chatwoot...');
                     await chatwoot.sendMessage(conversation.id, {
                         content: messageText,
@@ -304,7 +296,7 @@ router.post('/:instanceName', async (req, res) => {
         }
 
         // ========================================
-        // IGNORA EVENTOS PICTURE (FOTO DE PERFIL)
+        // IGNORA EVENTOS PICTURE
         // ========================================
         else if (parsedData.type === 'Picture') {
             console.log('⏭️ Evento Picture ignorado (mudança de foto de perfil)');
@@ -349,7 +341,6 @@ router.post('/:instanceName', async (req, res) => {
     }
 });
 
-// Exporta função para adicionar IDs ao cache
 router.addToChatwootCache = (messageId) => {
     chatwootMessageCache.set(messageId, Date.now());
 };
