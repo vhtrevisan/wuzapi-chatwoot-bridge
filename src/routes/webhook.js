@@ -155,9 +155,29 @@ router.post('/:instanceName', async (req, res) => {
                         const mediaBuffer = Buffer.from(response.data);
                         console.log(`✅ Mídia baixada (${Math.round(mediaBuffer.length / 1024)}KB)`);
 
-                        // Detecta nome do arquivo
-                        let mediaFileName = s3Data.fileName || 'file';
+                        // Gera nome amigável baseado no tipo MIME
                         let mediaMimeType = s3Data.mimeType || 'application/octet-stream';
+                        let mediaFileName = 'arquivo';
+
+                        if (mediaMimeType.startsWith('image/')) {
+                            const ext = mediaMimeType.split('/')[1].replace('jpeg', 'jpg');
+                            mediaFileName = `imagem.${ext}`;
+                        } else if (mediaMimeType.startsWith('audio/')) {
+                            mediaFileName = 'audio.ogg';
+                        } else if (mediaMimeType.startsWith('video/')) {
+                            mediaFileName = 'video.mp4';
+                        } else if (mediaMimeType === 'application/pdf') {
+                            mediaFileName = 'documento.pdf';
+                        } else if (mediaMimeType.includes('document') || mediaMimeType.includes('word')) {
+                            mediaFileName = 'documento.docx';
+                        } else if (mediaMimeType.includes('sheet') || mediaMimeType.includes('excel')) {
+                            mediaFileName = 'planilha.xlsx';
+                        } else if (s3Data.fileName) {
+                            // Mantém nome original para tipos desconhecidos
+                            mediaFileName = s3Data.fileName;
+                        }
+
+                        console.log('📝 Nome do arquivo:', mediaFileName);
 
                         // Upload para Chatwoot
                         console.log(`📤 Fazendo upload para Chatwoot...`);
