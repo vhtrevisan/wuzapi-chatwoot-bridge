@@ -51,6 +51,142 @@ router.post('/:instanceName', async (req, res) => {
         console.log('📋 Tipo de evento:', parsedData.type);
 
         // ========================================
+        // PROCESSA MÍDIAS DO MINIO (S3)
+        // ========================================
+        if (parsedData.type === 'Picture' || parsedData.type === 'Video' || 
+            parsedData.type === 'Audio' || parsedData.type === 'Document') {
+            
+            console.log(`📸 Mídia recebida do MinIO: ${parsedData.type}`);
+            
+            const info = parsedData.event?.Info;
+            const mediaUrl = parsedData.event?.URL;
+            const isFromMe = info?.IsFromMe;
+            const isGroup = info?.IsGroup;
+            const messageId = info?.ID;
+
+            if (!info || !mediaUrl) {
+                console.log('⚠️ Dados de mídia incompletos');
+                return res.status(400).json({ error: 'Dados incompletos' });
+            }
+
+            // IGNORA GRUPOS
+            if (isGroup === true) {
+                console.log('⏭️ Mídia de grupo ignorada');
+                return res.status(200).json({ success: true, message: 'Group media ignored' });
+            }
+
+            // Verifica duplicação
+            if (chatwootMessageCache.has(messageId)) {
+                console.log('⏭️ Mídia já processada (duplicada)');
+                return res.status(200).json({ success: true, message: 'Duplicate media ignored' });
+            }
+
+            chatwootMessageCache.set(messageId, Date.now());
+
+            // Extrai número de telefone
+            let phoneNumber;
+            if (isFromMe === true) {
+                phoneNumber = info.Chat || '';
+            } else {
+                phoneNumber = info.Sender || info.Chat || '';
+            }
+
+            phoneNumber = phoneNumber.replace('@s.whatsapp.net', '')
+                                     .replace('@c.us', '')
+                                     .replace('@lid', '')
+                                     .split(':')[0];
+
+            const senderName = info.PushName || phoneNumber;
+
+            if (!phoneNumber) {
+                console.log('⚠️ Número de telefone não encontrado');
+                return res.status(400).json({ error: 'Número de telefone não encontrado' });
+            }
+
+            console.log('📞 Telefone:', phoneNumber);
+            console.log('👤 Nome:', senderName);
+            console.log('🔗 URL MinIO:', mediaUrl);
+
+            try {
+                const chatwoot = new ChatwootService(integration);
+
+                console.log('🔍 Buscando/criando contato...');
+                const contact = await chatwoot.getOrCreateContact(phoneNumber, senderName);
+                console.log('✅ Contato ID:', contact.id);
+
+                console.log('🔍 Buscando/criando conversa...');
+                const conversation = await chatwoot.getOrCreateConversation(
+                    integration.chatwoot_inbox_id,
+                    contact.id
+                );
+                console.log('✅ Conversa ID:', conversation.id);
+
+                const messageType = isFromMe === true ? 'outgoing' : 'incoming';
+                console.log(`📝 Tipo de mensagem: ${messageType}`);
+
+                // Baixa mídia do MinIO
+                console.log('⬇️ Baixando mídia do MinIO...');
+                const response = await axios.get(mediaUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                });
+
+                const mediaBuffer = Buffer.from(response.data);
+                console.log(`✅ Mídia baixada (${Math.round(mediaBuffer.length / 1024)}KB)`);
+
+                // Detecta tipo e nome do arquivo
+                let mediaFileName = 'file';
+                let mediaMimeType = response.headers['content-type'] || 'application/octet-stream';
+                
+                if (parsedData.type === 'Picture') {
+                    mediaFileName = 'image.jpg';
+                    mediaMimeType = mediaMimeType || 'image/jpeg';
+                } else if (parsedData.type === 'Video') {
+                    mediaFileName = 'video.mp4';
+                    mediaMimeType = mediaMimeType || 'video/mp4';
+                } else if (parsedData.type === 'Audio') {
+                    mediaFileName = 'audio.ogg';
+                    mediaMimeType = mediaMimeType || 'audio/ogg';
+                } else if (parsedData.type === 'Document') {
+                    mediaFileName = parsedData.event?.FileName || 'document.pdf';
+                }
+
+                const caption = parsedData.event?.Caption || '';
+
+                // Upload para Chatwoot
+                console.log(`📤 Fazendo upload para Chatwoot...`);
+                await chatwoot.uploadAttachment(
+                    conversation.id,
+                    mediaBuffer,
+                    mediaFileName,
+                    mediaMimeType,
+                    caption || `📎 ${mediaFileName}`
+                );
+
+                console.log('✅ Mídia enviada para Chatwoot');
+
+                // Se tem legenda, envia como mensagem separada
+                if (caption) {
+                    await chatwoot.sendMessage(conversation.id, {
+                        content: caption,
+                        text: caption
+                    }, messageType);
+                }
+
+                return res.status(200).json({ 
+                    success: true,
+                    conversation_id: conversation.id,
+                    contact_id: contact.id
+                });
+
+            } catch (error) {
+                console.error('❌ Erro ao processar mídia do MinIO:', error.message);
+                console.error('❌ Stack:', error.stack);
+                throw error;
+            }
+        }
+
+        // ========================================
         // PROCESSA MENSAGENS RECEBIDAS (APENAS TEXTO)
         // ========================================
         if (parsedData.type === 'Message') {
@@ -105,17 +241,17 @@ router.post('/:instanceName', async (req, res) => {
                              message.extendedTextMessage?.text ||
                              '';
 
-            // Detecta mídia mas IGNORA processamento
+            // Detecta mídia mas IGNORA processamento (será tratado pelo evento Picture/Video/etc)
             if (message.imageMessage) {
-                messageText = message.imageMessage.caption || '📷 Imagem (mídia temporariamente desabilitada)';
+                messageText = message.imageMessage.caption || '📷 Imagem';
             } else if (message.videoMessage) {
-                messageText = message.videoMessage.caption || '🎥 Vídeo (mídia temporariamente desabilitada)';
+                messageText = message.videoMessage.caption || '🎥 Vídeo';
             } else if (message.audioMessage) {
-                messageText = '🎵 Áudio (mídia temporariamente desabilitada)';
+                messageText = '🎵 Áudio';
             } else if (message.documentMessage) {
-                messageText = `📄 Documento (mídia temporariamente desabilitada)`;
+                messageText = `📄 Documento`;
             } else if (message.stickerMessage) {
-                messageText = '🎨 Sticker (mídia temporariamente desabilitada)';
+                messageText = '🎨 Sticker';
             } else if (!messageText) {
                 messageText = '[Mensagem sem conteúdo de texto]';
             }
