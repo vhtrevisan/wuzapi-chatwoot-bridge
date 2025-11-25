@@ -3,6 +3,89 @@ const router = express.Router();
 const { getAllIntegrations } = require('../database/sqlite');
 const WuzAPIService = require('../services/wuzapi');
 
+// ========================================
+// SISTEMA DE FILA DE MENSAGENS
+// ========================================
+const messageQueue = [];
+let isProcessingQueue = false;
+let queueStats = {
+    total: 0,
+    success: 0,
+    failed: 0,
+    queued: 0
+};
+
+/**
+ * Processa a fila de mensagens UMA POR VEZ
+ */
+async function processQueue() {
+    if (isProcessingQueue || messageQueue.length === 0) {
+        return;
+    }
+
+    isProcessingQueue = true;
+    console.log(`🔄 Iniciando processamento da fila (${messageQueue.length} mensagens pendentes)`);
+
+    while (messageQueue.length > 0) {
+        const job = messageQueue.shift();
+        queueStats.queued = messageQueue.length;
+
+        try {
+            console.log(`📤 [FILA] Processando mensagem para: ${job.phoneNumber}`);
+            
+            const wuzapi = new WuzAPIService(job.integration);
+            await wuzapi.sendMessage(job.phoneNumber, job.messageContent, job.attachments);
+            
+            console.log(`✅ [FILA] Mensagem enviada com sucesso para: ${job.phoneNumber}`);
+            queueStats.success++;
+
+            // AGUARDA 1 SEGUNDO ENTRE CADA ENVIO (evita sobrecarga)
+            if (messageQueue.length > 0) {
+                console.log(`⏳ Aguardando 1s antes da próxima mensagem... (${messageQueue.length} na fila)`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+        } catch (error) {
+            console.error(`❌ [FILA] Erro ao enviar mensagem:`, error.message);
+            queueStats.failed++;
+
+            // Se falhar, tenta reprocessar até 2 vezes
+            if (!job.retryCount) job.retryCount = 0;
+            
+            if (job.retryCount < 2) {
+                job.retryCount++;
+                console.log(`🔄 [FILA] Reenfileirando mensagem (tentativa ${job.retryCount}/2)`);
+                messageQueue.push(job); // Recoloca no final da fila
+                
+                // Aguarda 5 segundos antes de tentar novamente
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            } else {
+                console.error(`❌ [FILA] Mensagem descartada após 3 tentativas: ${job.phoneNumber}`);
+            }
+        }
+    }
+
+    isProcessingQueue = false;
+    console.log(`✅ [FILA] Processamento concluído. Stats: ${queueStats.success} enviadas, ${queueStats.failed} falharam`);
+}
+
+// Monitora a fila a cada 500ms
+setInterval(() => {
+    if (messageQueue.length > 0 && !isProcessingQueue) {
+        processQueue();
+    }
+}, 500);
+
+// Log de estatísticas a cada 1 minuto
+setInterval(() => {
+    if (queueStats.total > 0) {
+        console.log(`📊 [FILA] Estatísticas: Total=${queueStats.total}, Sucesso=${queueStats.success}, Falhas=${queueStats.failed}, Na fila=${queueStats.queued}`);
+    }
+}, 60000);
+
+// ========================================
+// ROTA PRINCIPAL
+// ========================================
 router.post('/events', async (req, res) => {
     try {
         const event = req.body;
@@ -74,7 +157,6 @@ router.post('/events', async (req, res) => {
         
         if (cleanPhone.length > 15) {
             console.log(`⚠️ Telefone suspeito (muito longo): ${phoneNumber} (${cleanPhone.length} dígitos)`);
-            // Não bloqueia, mas registra aviso
         }
 
         const messageContent = event.content || '';
@@ -92,12 +174,10 @@ router.post('/events', async (req, res) => {
         attachments = attachments.map(att => {
             let fileName = att.fallback_title || att.file_name || 'file';
             
-            // Se o nome for genérico, tenta extrair da URL
             if (fileName === 'file' && att.data_url) {
                 try {
                     const urlParts = att.data_url.split('/');
                     const lastPart = urlParts[urlParts.length - 1];
-                    // Decodifica URL encoding
                     const decodedName = decodeURIComponent(lastPart);
                     if (decodedName && decodedName.length > 0 && decodedName !== 'file') {
                         fileName = decodedName;
@@ -113,7 +193,7 @@ router.post('/events', async (req, res) => {
             };
         });
 
-        console.log('📤 Enviando para WhatsApp:', phoneNumber);
+        console.log('📤 Adicionando à FILA de envio para WhatsApp:', phoneNumber);
         console.log('📝 Texto:', messageContent || '(sem texto)');
         console.log('📎 Anexos:', attachments.length);
         
@@ -121,31 +201,29 @@ router.post('/events', async (req, res) => {
             console.log('📋 Detalhes dos anexos:', attachments.map(a => ({
                 name: a.file_name,
                 type: a.file_type,
-                url: a.data_url?.substring(0, 100) + '...' // Trunca URL longa
+                url: a.data_url?.substring(0, 100) + '...'
             })));
         }
 
-        // Envia mensagem via WuzAPI
-        const wuzapi = new WuzAPIService(integration);
-        
-        try {
-            await wuzapi.sendMessage(phoneNumber, messageContent, attachments);
-            console.log('✅ Mensagem enviada com sucesso para WhatsApp!');
-        } catch (wuzapiError) {
-            console.error('❌ Erro do WuzAPI:', wuzapiError.message);
-            console.error('❌ Status:', wuzapiError.response?.status);
-            console.error('❌ Response:', wuzapiError.response?.data);
-            
-            // Retorna erro específico para o Chatwoot
-            return res.status(500).json({ 
-                error: 'Falha ao enviar mensagem via WuzAPI',
-                details: wuzapiError.response?.data || wuzapiError.message,
-                phone: phoneNumber
-            });
-        }
+        // ADICIONA À FILA (NÃO ENVIA DIRETO!)
+        messageQueue.push({
+            integration,
+            phoneNumber,
+            messageContent,
+            attachments,
+            timestamp: Date.now()
+        });
 
+        queueStats.total++;
+        queueStats.queued = messageQueue.length;
+
+        console.log(`✅ Mensagem adicionada à fila (posição ${messageQueue.length})`);
+
+        // RESPONDE IMEDIATAMENTE (não espera envio)
         return res.status(200).json({ 
             success: true,
+            queued: true,
+            position: messageQueue.length,
             phone: phoneNumber,
             attachments_count: attachments.length
         });
@@ -160,6 +238,15 @@ router.post('/events', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     }
+});
+
+// Endpoint para monitorar a fila
+router.get('/queue/status', (req, res) => {
+    res.json({
+        queue_length: messageQueue.length,
+        is_processing: isProcessingQueue,
+        stats: queueStats
+    });
 });
 
 module.exports = router;
