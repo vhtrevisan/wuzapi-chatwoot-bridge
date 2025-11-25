@@ -333,11 +333,13 @@ class WuzAPIService {
                         }
                         
                     } else {
-                        // Documento genérico
-                        let mimeType = 'application/octet-stream';
-                        if (fileName.match(/\.pdf$/i)) mimeType = 'application/pdf';
-                        else if (fileName.match(/\.docx?$/i)) mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                        else if (fileName.match(/\.xlsx?$/i)) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                        // CRÍTICO: WuzAPI SEMPRE EXIGE application/octet-stream para documentos
+                        console.log(`📄 Documento detectado: ${fileName}`);
+                        
+                        // FORÇA application/octet-stream independente da extensão
+                        const mimeType = 'application/octet-stream';
+                        
+                        console.log(`🔧 Usando MIME type obrigatório: ${mimeType}`);
                         
                         base64Data = await this.downloadAndConvertToBase64(fileUrl, mimeType);
                         await this.sendDocumentMessage(phoneNumber, base64Data, fileName);
