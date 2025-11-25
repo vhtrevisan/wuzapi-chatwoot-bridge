@@ -56,7 +56,7 @@ router.post('/:instanceName', async (req, res) => {
         if (parsedData.type === 'Message') {
             const info = parsedData.event?.Info;
             const message = parsedData.event?.Message;
-            const s3Data = parsedData.s3; // ← CAMPO S3 COM URL DO MINIO
+            const s3Data = parsedData.s3;
             const isFromMe = info?.IsFromMe;
             const isGroup = info?.IsGroup;
             const messageId = info?.ID;
@@ -145,11 +145,18 @@ router.post('/:instanceName', async (req, res) => {
                     console.log('📦 Tamanho:', Math.round(s3Data.size / 1024), 'KB');
 
                     try {
-                        // Baixa mídia do MinIO
-                        console.log('⬇️ Baixando mídia do MinIO...');
+                        // Baixa mídia do MinIO COM AUTENTICAÇÃO
+                        console.log('⬇️ Baixando mídia do MinIO (com autenticação)...');
                         const response = await axios.get(s3Data.url, {
                             responseType: 'arraybuffer',
-                            timeout: 30000
+                            timeout: 30000,
+                            auth: {
+                                username: 'admin',
+                                password: 'sM@rt814223cd'
+                            },
+                            headers: {
+                                'User-Agent': 'wuzapi-chatwoot-bridge/1.0'
+                            }
                         });
 
                         const mediaBuffer = Buffer.from(response.data);
@@ -181,6 +188,8 @@ router.post('/:instanceName', async (req, res) => {
 
                     } catch (mediaError) {
                         console.error('❌ Erro ao processar mídia:', mediaError.message);
+                        console.error('❌ Status:', mediaError.response?.status);
+                        console.error('❌ Headers da resposta:', mediaError.response?.headers);
                         
                         // Se falhar, envia pelo menos o texto
                         const fallbackText = caption || messageText || '📎 [Falha ao carregar mídia]';
