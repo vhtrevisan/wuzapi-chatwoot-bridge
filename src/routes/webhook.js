@@ -49,6 +49,7 @@ router.post('/:instanceName', async (req, res) => {
         }
 
         console.log('📋 Tipo de evento:', parsedData.type);
+        console.log('📦 DADOS COMPLETOS DO WEBHOOK:', JSON.stringify(parsedData, null, 2));
 
         // ========================================
         // PROCESSA MÍDIAS DO MINIO (S3)
