@@ -231,33 +231,50 @@ router.post('/:instanceName', async (req, res) => {
                         }
 
                         console.log(`⬇️ Baixando mídia via: ${integration.wuzapi_url}${downloadEndpoint}`);
+                        console.log(`📦 Payload sendo enviado:`, JSON.stringify(downloadPayload, null, 2));
 
-                        // Faz request para WuzAPI descriptografar
-                        const wuzapiResponse = await axios.post(
-                            `${integration.wuzapi_url}${downloadEndpoint}?token=${integration.wuzapi_token}`,
-                            downloadPayload,
-                            {
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                timeout: 60000
+                        try {
+                            // Faz request para WuzAPI descriptografar
+                            const wuzapiResponse = await axios.post(
+                                `${integration.wuzapi_url}${downloadEndpoint}?token=${integration.wuzapi_token}`,
+                                downloadPayload,
+                                {
+                                    headers: {
+                                        'Content-Type': 'application/json'
+                                    },
+                                    timeout: 60000
+                                }
+                            );
+
+                            console.log(`✅ Resposta WuzAPI status: ${wuzapiResponse.status}`);
+                            console.log(`📦 Dados retornados:`, JSON.stringify({
+                                mimetype: wuzapiResponse.data?.mimetype,
+                                dataLength: wuzapiResponse.data?.data?.length || 0
+                            }, null, 2));
+
+                            if (!wuzapiResponse.data || !wuzapiResponse.data.mimetype || !wuzapiResponse.data.data) {
+                                throw new Error('WuzAPI não retornou dados válidos');
                             }
-                        );
 
-                        if (!wuzapiResponse.data || !wuzapiResponse.data.mimetype || !wuzapiResponse.data.data) {
-                            throw new Error('WuzAPI não retornou dados válidos');
-                        }
+                            console.log(`✅ Mídia descriptografada pelo WuzAPI (${wuzapiResponse.data.mimetype})`);
 
-                        console.log(`✅ Mídia descriptografada pelo WuzAPI (${wuzapiResponse.data.mimetype})`);
+                            // Converte base64 para buffer
+                            const base64Data = wuzapiResponse.data.data.replace(/^data:.*?;base64,/, '');
+                            mediaBuffer = Buffer.from(base64Data, 'base64');
 
-                        // Converte base64 para buffer
-                        const base64Data = wuzapiResponse.data.data.replace(/^data:.*?;base64,/, '');
-                        mediaBuffer = Buffer.from(base64Data, 'base64');
+                            console.log(`✅ Buffer criado (${Math.round(mediaBuffer.length / 1024)}KB)`);
 
-                        console.log(`✅ Buffer criado (${Math.round(mediaBuffer.length / 1024)}KB)`);
+                            if (!mediaBuffer || mediaBuffer.length === 0) {
+                                throw new Error('Buffer de mídia vazio após descriptografia');
+                            }
 
-                        if (!mediaBuffer || mediaBuffer.length === 0) {
-                            throw new Error('Buffer de mídia vazio após descriptografia');
+                        } catch (wuzapiError) {
+                            console.error('❌ ERRO DETALHADO DO WUZAPI:');
+                            console.error('❌ Status:', wuzapiError.response?.status);
+                            console.error('❌ Status Text:', wuzapiError.response?.statusText);
+                            console.error('❌ Data:', JSON.stringify(wuzapiError.response?.data, null, 2));
+                            console.error('❌ Headers:', JSON.stringify(wuzapiError.response?.headers, null, 2));
+                            throw wuzapiError;
                         }
                         
                         console.log(`📤 Fazendo upload para Chatwoot (${Math.round(mediaBuffer.length / 1024)}KB)`);
